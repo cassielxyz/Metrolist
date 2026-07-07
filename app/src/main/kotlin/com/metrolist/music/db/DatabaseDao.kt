@@ -655,9 +655,13 @@ interface DatabaseDao {
     @Query("SELECT * FROM song WHERE id = :songId LIMIT 1")
     fun getSongByIdBlocking(songId: String): Song?
 
-    @Transaction
     @Query("SELECT * FROM song WHERE id IN (:songIds)")
-    suspend fun getSongsByIds(songIds: List<String>): List<Song>
+    suspend fun getSongsByIdsInternal(songIds: List<String>): List<Song>
+
+    @Transaction
+    suspend fun getSongsByIds(songIds: List<String>): List<Song> {
+        return songIds.chunked(900).flatMap { getSongsByIdsInternal(it) }
+    }
 
 
     @Transaction
@@ -1083,10 +1087,18 @@ interface DatabaseDao {
     ): Int
 
     @Query("SELECT songId from playlist_song_map WHERE playlistId = :playlistId AND songId IN (:songIds)")
-    fun playlistDuplicates(
+    fun playlistDuplicatesInternal(
         playlistId: String,
         songIds: List<String>,
     ): List<String>
+
+    @Transaction
+    fun playlistDuplicates(
+        playlistId: String,
+        songIds: List<String>,
+    ): List<String> {
+        return songIds.chunked(900).flatMap { playlistDuplicatesInternal(playlistId, it) }
+    }
 
     @Query("UPDATE playlist SET lastUpdateTime = :now WHERE id = :playlistId")
     fun updatePlaylistLastUpdated(
