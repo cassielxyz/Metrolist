@@ -78,6 +78,10 @@ import java.util.Locale
  */
 @Dao
 interface DatabaseDao {
+    companion object {
+        private const val SQL_IN_CLAUSE_CHUNK_SIZE = 900
+    }
+
     @Transaction
     @Query("SELECT * FROM song WHERE inLibrary IS NOT NULL ORDER BY rowId")
     fun songsByRowIdAsc(): Flow<List<Song>>
@@ -660,7 +664,7 @@ interface DatabaseDao {
 
     @Transaction
     suspend fun getSongsByIds(songIds: List<String>): List<Song> {
-        return songIds.chunked(900).flatMap { getSongsByIdsInternal(it) }
+        return songIds.chunked(SQL_IN_CLAUSE_CHUNK_SIZE).flatMap { getSongsByIdsInternal(it) }
     }
 
 
@@ -1097,7 +1101,7 @@ interface DatabaseDao {
         playlistId: String,
         songIds: List<String>,
     ): List<String> {
-        return songIds.chunked(900).flatMap { playlistDuplicatesInternal(playlistId, it) }
+        return songIds.chunked(SQL_IN_CLAUSE_CHUNK_SIZE).flatMap { playlistDuplicatesInternal(playlistId, it) }
     }
 
     @Query("UPDATE playlist SET lastUpdateTime = :now WHERE id = :playlistId")

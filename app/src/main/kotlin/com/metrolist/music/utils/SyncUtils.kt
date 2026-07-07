@@ -1418,6 +1418,9 @@ class SyncUtils @Inject constructor(
                                 database.insert(playlistEntity)
                                 Timber.d("syncSavedPlaylists: Created new playlist ${playlist.title} (${playlist.id})")
                             } else {
+                                if (playlistEntity.bookmarkedAt == null) {
+                                    playlistEntity = playlistEntity.copy(bookmarkedAt = LocalDateTime.now())
+                                }
                                 database.update(playlistEntity, playlist)
                                 Timber.d("syncSavedPlaylists: Updated existing playlist ${playlist.title} (${playlist.id})")
                             }
