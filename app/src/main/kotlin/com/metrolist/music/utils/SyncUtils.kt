@@ -1399,7 +1399,7 @@ class SyncUtils @Inject constructor(
 
                     for (playlist in remotePlaylists) {
                         try {
-                            var playlistEntity = localPlaylists.find { it.playlist.browseId == playlist.id }?.playlist
+                            var playlistEntity = database.playlistByBrowseId(playlist.id).firstOrNull()?.playlist
 
                             if (playlistEntity == null) {
                                 playlistEntity = PlaylistEntity(
