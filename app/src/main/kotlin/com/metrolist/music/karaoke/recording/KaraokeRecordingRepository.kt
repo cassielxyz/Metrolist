@@ -21,6 +21,7 @@ data class SavedKaraokeRecording(
     val title: String,
     val artist: String,
     val createdAtEpochMs: Long,
+    val instrumentalUri: String? = null,
 )
 
 /** Local-only metadata index for solo and duet vocal takes. */
@@ -42,7 +43,7 @@ class KaraokeRecordingRepository(
         val manifest = File(vocalFile.parentFile, "${take.id}.take.properties")
         val temporary = File(vocalFile.parentFile, "${take.id}.take.properties.tmp")
         val properties = Properties().apply {
-            setProperty("version", "1")
+            setProperty("version", "2")
             setProperty("id", take.id)
             setProperty("sessionId", take.sessionId)
             setProperty("vocalUri", take.vocalUri)
@@ -51,6 +52,7 @@ class KaraokeRecordingRepository(
             setProperty("title", session.song.title)
             setProperty("artist", session.song.artist)
             setProperty("createdAtEpochMs", createdAtEpochMs.toString())
+            setProperty("instrumentalUri", session.stems.instrumentalUri)
             take.syncMetadata?.let { sync ->
                 setProperty("localStartTimestampNs", sync.localStartTimestampNs.toString())
                 sync.roomStartErrorMs?.let {
@@ -68,7 +70,13 @@ class KaraokeRecordingRepository(
         }
         if (manifest.exists()) manifest.delete()
         check(temporary.renameTo(manifest)) { "Unable to persist recording metadata" }
-        SavedKaraokeRecording(take, session.song.title, session.song.artist, createdAtEpochMs)
+        SavedKaraokeRecording(
+            take = take,
+            title = session.song.title,
+            artist = session.song.artist,
+            createdAtEpochMs = createdAtEpochMs,
+            instrumentalUri = session.stems.instrumentalUri,
+        )
     }
 
     suspend fun list(): List<SavedKaraokeRecording> = withContext(Dispatchers.IO) {
@@ -83,16 +91,19 @@ class KaraokeRecordingRepository(
     suspend fun delete(recording: SavedKaraokeRecording): Boolean = withContext(Dispatchers.IO) {
         val vocal = fileFromUri(recording.take.vocalUri)
         val manifest = vocal?.parentFile?.resolve("${recording.take.id}.take.properties")
+        val mix = vocal?.parentFile?.resolve("${recording.take.id}.mix.wav")
         val vocalDeleted = vocal == null || !vocal.exists() || vocal.delete()
         val manifestDeleted = manifest == null || !manifest.exists() || manifest.delete()
-        vocalDeleted && manifestDeleted
+        val mixDeleted = mix == null || !mix.exists() || mix.delete()
+        vocalDeleted && manifestDeleted && mixDeleted
     }
 
     private fun readManifest(file: File): SavedKaraokeRecording? = runCatching {
         val properties = Properties().apply {
             file.inputStream().buffered().use(::load)
         }
-        if (properties.getProperty("version") != "1") return@runCatching null
+        val version = properties.getProperty("version")?.toIntOrNull() ?: 1
+        if (version !in 1..2) return@runCatching null
         val vocalUri = properties.getProperty("vocalUri") ?: return@runCatching null
         val vocalFile = fileFromUri(vocalUri) ?: return@runCatching null
         if (!vocalFile.isFile || vocalFile.length() <= 44L) return@runCatching null
@@ -119,6 +130,7 @@ class KaraokeRecordingRepository(
             title = properties.getProperty("title").orEmpty(),
             artist = properties.getProperty("artist").orEmpty(),
             createdAtEpochMs = properties.getProperty("createdAtEpochMs")?.toLongOrNull() ?: 0L,
+            instrumentalUri = properties.getProperty("instrumentalUri")?.takeIf { it.isNotBlank() },
         )
     }.getOrNull()
 
