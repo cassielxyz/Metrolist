@@ -5,7 +5,6 @@
 
 package com.metrolist.music.ui.screens.karaoke
 
-import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,6 +27,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_SONG
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.music.LocalNavController
+import com.metrolist.music.karaoke.model.KaraokeSelectionStore
+import com.metrolist.music.karaoke.model.KaraokeSongRef
+import com.metrolist.music.karaoke.model.KaraokeSource
 import com.metrolist.music.ui.component.YouTubeListItem
 import com.metrolist.music.viewmodels.OnlineSearchViewModel
 
@@ -88,15 +90,17 @@ fun KaraokeOnlineSearchResult(
                             isActive = false,
                             isPlaying = false,
                             modifier = Modifier.clickable {
-                                val artist = song.artists.joinToString(", ") { it.name }
-                                val route = buildString {
-                                    append("karaoke_prepare/${song.id}")
-                                    append("?title=${Uri.encode(song.title)}")
-                                    append("&artist=${Uri.encode(artist)}")
-                                    append("&duration=${song.duration ?: -1}")
-                                    append("&artwork=${Uri.encode(song.thumbnail)}")
-                                }
-                                navController.navigate(route)
+                                KaraokeSelectionStore.put(
+                                    KaraokeSongRef(
+                                        id = song.id,
+                                        title = song.title,
+                                        artist = song.artists.joinToString(", ") { it.name },
+                                        source = KaraokeSource.ONLINE,
+                                        durationMs = song.duration?.times(1_000L),
+                                        artworkUrl = song.thumbnail,
+                                    ),
+                                )
+                                navController.navigate("karaoke_prepare/${song.id}")
                             },
                             trailingContent = {
                                 Text(
