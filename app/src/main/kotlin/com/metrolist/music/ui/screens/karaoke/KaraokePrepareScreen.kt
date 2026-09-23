@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.karaoke
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,8 +27,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.metrolist.music.karaoke.domain.KaraokeAudioSourceResolver
 import com.metrolist.music.karaoke.model.KaraokeSongRef
 import com.metrolist.music.karaoke.model.KaraokeSource
+import com.metrolist.music.karaoke.source.LocalKaraokeSourceResolver
 import com.metrolist.music.karaoke.source.MetrolistOnlineKaraokeSourceResolver
 
 private sealed interface SourcePreparationUiState {
@@ -37,31 +40,44 @@ private sealed interface SourcePreparationUiState {
 }
 
 /**
- * First preparation stage for an online karaoke item.
- * It verifies the existing Metrolist playback resolver before expensive separation starts.
+ * First preparation stage shared by online and local karaoke items.
+ * It verifies that the source can be resolved before expensive stem separation starts.
  */
 @Composable
 fun KaraokePrepareScreen(
-    videoId: String,
+    songId: String,
+    source: KaraokeSource,
+    mediaUri: String? = null,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val resolver = remember(context) {
-        MetrolistOnlineKaraokeSourceResolver(context.applicationContext)
+    val resolver: KaraokeAudioSourceResolver = remember(context, source) {
+        when (source) {
+            KaraokeSource.ONLINE -> MetrolistOnlineKaraokeSourceResolver(context.applicationContext)
+            KaraokeSource.LOCAL -> LocalKaraokeSourceResolver()
+        }
     }
-    var state: SourcePreparationUiState by remember(videoId) {
+    val displayName = remember(songId, source, mediaUri) {
+        if (source == KaraokeSource.LOCAL && mediaUri != null) {
+            Uri.parse(mediaUri).lastPathSegment ?: "Local song"
+        } else {
+            songId
+        }
+    }
+    var state: SourcePreparationUiState by remember(songId, source, mediaUri) {
         mutableStateOf(SourcePreparationUiState.Resolving)
     }
 
-    LaunchedEffect(videoId) {
+    LaunchedEffect(songId, source, mediaUri) {
         state = SourcePreparationUiState.Resolving
         state = runCatching {
             resolver.resolve(
                 KaraokeSongRef(
-                    id = videoId,
-                    title = videoId,
+                    id = songId,
+                    title = displayName,
                     artist = "",
-                    source = KaraokeSource.ONLINE,
+                    source = source,
+                    mediaUri = mediaUri,
                 ),
             )
         }.fold(
@@ -86,7 +102,7 @@ fun KaraokePrepareScreen(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "Song ID: $videoId",
+            text = displayName,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -97,8 +113,8 @@ fun KaraokePrepareScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 PreparationLine(
-                    label = "Online audio source",
-                    value = when (val current = state) {
+                    label = if (source == KaraokeSource.ONLINE) "Online audio source" else "Local audio source",
+                    value = when (state) {
                         SourcePreparationUiState.Resolving -> "Resolving…"
                         is SourcePreparationUiState.Ready -> "Ready"
                         is SourcePreparationUiState.Failed -> "Failed"
@@ -119,7 +135,7 @@ fun KaraokePrepareScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    text = "The next implementation slice connects the vocal-separation and lyric adapters. The app does not pretend the original audio is an instrumental.",
+                    text = "The separation and lyric adapters are intentionally required before Start Karaoke is enabled; original audio is never mislabeled as an instrumental.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
