@@ -38,6 +38,8 @@ kuromojiIpadic = "0.9.0"
 extractor = "3cd3341"
 tinypinyin = "2.0.3"
 protobuf = "4.34.1"
+onnxRuntime = "1.30.0"
+jTransforms = "3.2"
 
 [libraries]
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
@@ -123,6 +125,9 @@ tinypinyin = { module = "com.github.promeG:tinypinyin", version.ref = "tinypinyi
 
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
 protobuf-kotlin-lite = { module = "com.google.protobuf:protobuf-kotlin-lite", version.ref = "protobuf" }
+
+onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxRuntime" }
+jtransforms = { module = "com.github.wendykierp:JTransforms", version.ref = "jTransforms" }
 
 [plugins]
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
