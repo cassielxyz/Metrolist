@@ -1,6 +1,6 @@
 /**
- * Metrolist Project (C) 2026
- * Licensed under GPL-3.0 | See git history for contributors
+ * KaraVox Project (C) 2026
+ * Licensed under GPL-3.0.
  */
 
 package com.metrolist.music.ui.screens.karaoke
@@ -28,6 +28,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.metrolist.music.karaoke.domain.KaraokeAudioSourceResolver
+import com.metrolist.music.karaoke.domain.KaraokeLyricsProvider
+import com.metrolist.music.karaoke.lyrics.BetterLyricsKaraokeProvider
+import com.metrolist.music.karaoke.lyrics.LrcLibKaraokeProvider
+import com.metrolist.music.karaoke.model.KaraokeLyrics
 import com.metrolist.music.karaoke.model.KaraokeSongRef
 import com.metrolist.music.karaoke.model.KaraokeSource
 import com.metrolist.music.karaoke.source.LocalKaraokeSourceResolver
@@ -39,14 +43,25 @@ private sealed interface SourcePreparationUiState {
     data class Failed(val message: String) : SourcePreparationUiState
 }
 
+private sealed interface LyricsPreparationUiState {
+    object Waiting : LyricsPreparationUiState
+    object Loading : LyricsPreparationUiState
+    data class Ready(val lyrics: KaraokeLyrics) : LyricsPreparationUiState
+    data class Missing(val reason: String) : LyricsPreparationUiState
+}
+
 /**
  * First preparation stage shared by online and local karaoke items.
- * It verifies that the source can be resolved before expensive stem separation starts.
+ * Source resolution and lyrics are verified here before expensive stem separation begins.
  */
 @Composable
 fun KaraokePrepareScreen(
     songId: String,
     source: KaraokeSource,
+    title: String? = null,
+    artist: String? = null,
+    durationSeconds: Int? = null,
+    artworkUrl: String? = null,
     mediaUri: String? = null,
     onBack: () -> Unit,
 ) {
@@ -57,37 +72,79 @@ fun KaraokePrepareScreen(
             KaraokeSource.LOCAL -> LocalKaraokeSourceResolver()
         }
     }
-    val displayName = remember(songId, source, mediaUri) {
+    val lyricsProviders: List<KaraokeLyricsProvider> = remember {
+        listOf(
+            BetterLyricsKaraokeProvider(),
+            LrcLibKaraokeProvider(),
+        )
+    }
+
+    val fallbackName = remember(songId, source, mediaUri) {
         if (source == KaraokeSource.LOCAL && mediaUri != null) {
             Uri.parse(mediaUri).lastPathSegment ?: "Local song"
         } else {
             songId
         }
     }
-    var state: SourcePreparationUiState by remember(songId, source, mediaUri) {
+    val resolvedTitle = title?.takeIf { it.isNotBlank() } ?: fallbackName
+    val resolvedArtist = artist.orEmpty()
+
+    var sourceState: SourcePreparationUiState by remember(songId, source, mediaUri) {
         mutableStateOf(SourcePreparationUiState.Resolving)
     }
+    var lyricsState: LyricsPreparationUiState by remember(songId, resolvedTitle, resolvedArtist) {
+        mutableStateOf(LyricsPreparationUiState.Waiting)
+    }
 
-    LaunchedEffect(songId, source, mediaUri) {
-        state = SourcePreparationUiState.Resolving
-        state = runCatching {
-            resolver.resolve(
-                KaraokeSongRef(
-                    id = songId,
-                    title = displayName,
-                    artist = "",
-                    source = source,
-                    mediaUri = mediaUri,
-                ),
-            )
-        }.fold(
-            onSuccess = { SourcePreparationUiState.Ready(it.durationMs) },
-            onFailure = {
-                SourcePreparationUiState.Failed(
-                    it.message ?: "Unable to resolve this song",
-                )
-            },
+    LaunchedEffect(songId, source, mediaUri, resolvedTitle, resolvedArtist, durationSeconds) {
+        sourceState = SourcePreparationUiState.Resolving
+        lyricsState = LyricsPreparationUiState.Waiting
+
+        val song = KaraokeSongRef(
+            id = songId,
+            title = resolvedTitle,
+            artist = resolvedArtist,
+            source = source,
+            durationMs = durationSeconds?.takeIf { it > 0 }?.times(1_000L),
+            artworkUrl = artworkUrl,
+            mediaUri = mediaUri,
         )
+
+        runCatching { resolver.resolve(song) }
+            .onSuccess { resolvedAudio ->
+                sourceState = SourcePreparationUiState.Ready(resolvedAudio.durationMs)
+
+                if (resolvedTitle.isBlank() || resolvedArtist.isBlank()) {
+                    lyricsState = LyricsPreparationUiState.Missing(
+                        "Artist/title metadata is needed for online lyric matching. Local metadata parsing is the next fallback.",
+                    )
+                    return@onSuccess
+                }
+
+                lyricsState = LyricsPreparationUiState.Loading
+                val durationMs = resolvedAudio.durationMs ?: song.durationMs
+                var found: KaraokeLyrics? = null
+                for (provider in lyricsProviders) {
+                    found = runCatching {
+                        provider.getLyrics(song, durationMs)
+                    }.getOrNull()
+                    if (found != null) break
+                }
+
+                lyricsState = if (found != null) {
+                    LyricsPreparationUiState.Ready(found)
+                } else {
+                    LyricsPreparationUiState.Missing(
+                        "No synced lyrics found. KaraVox will allow local LRC/TTML import or manual sync.",
+                    )
+                }
+            }
+            .onFailure { error ->
+                sourceState = SourcePreparationUiState.Failed(
+                    error.message ?: "Unable to resolve this song",
+                )
+                lyricsState = LyricsPreparationUiState.Waiting
+            }
     }
 
     Column(
@@ -102,10 +159,17 @@ fun KaraokePrepareScreen(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = displayName,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            text = resolvedTitle,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
         )
+        if (resolvedArtist.isNotBlank()) {
+            Text(
+                text = resolvedArtist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(
@@ -114,30 +178,33 @@ fun KaraokePrepareScreen(
             ) {
                 PreparationLine(
                     label = if (source == KaraokeSource.ONLINE) "Online audio source" else "Local audio source",
-                    value = when (state) {
+                    value = when (sourceState) {
                         SourcePreparationUiState.Resolving -> "Resolving…"
                         is SourcePreparationUiState.Ready -> "Ready"
                         is SourcePreparationUiState.Failed -> "Failed"
                     },
                 )
                 PreparationLine(label = "Vocal separation", value = "Pending engine")
-                PreparationLine(label = "Synced lyrics", value = "Pending provider adapter")
+                PreparationLine(
+                    label = "Synced lyrics",
+                    value = when (val current = lyricsState) {
+                        LyricsPreparationUiState.Waiting -> "Waiting"
+                        LyricsPreparationUiState.Loading -> "Searching…"
+                        is LyricsPreparationUiState.Ready -> current.lyrics.source.name.replace('_', ' ')
+                        is LyricsPreparationUiState.Missing -> "Fallback needed"
+                    },
+                )
                 PreparationLine(label = "Karaoke cache", value = "Pending")
             }
         }
 
-        when (val current = state) {
+        when (val current = sourceState) {
             SourcePreparationUiState.Resolving -> CircularProgressIndicator()
             is SourcePreparationUiState.Ready -> {
                 Text(
-                    text = current.durationMs?.let { "Source resolved • ${it / 1_000}s" }
-                        ?: "Source resolved and ready for local processing.",
+                    text = current.durationMs?.let { "Audio source ready • ${it / 1_000}s" }
+                        ?: "Audio source ready for local processing.",
                     color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = "The separation and lyric adapters are intentionally required before Start Karaoke is enabled; original audio is never mislabeled as an instrumental.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             is SourcePreparationUiState.Failed -> {
@@ -147,6 +214,35 @@ fun KaraokePrepareScreen(
                 )
             }
         }
+
+        when (val current = lyricsState) {
+            LyricsPreparationUiState.Loading -> Text("Finding the best synced lyrics…")
+            is LyricsPreparationUiState.Ready -> {
+                val wordCount = current.lyrics.lines.sumOf { it.words.size }
+                Text(
+                    text = if (wordCount > 0) {
+                        "Lyrics ready • ${current.lyrics.lines.size} lines • $wordCount timed words"
+                    } else {
+                        "Lyrics ready • ${current.lyrics.lines.size} synced lines"
+                    },
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            is LyricsPreparationUiState.Missing -> {
+                Text(
+                    text = current.reason,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            LyricsPreparationUiState.Waiting -> Unit
+        }
+
+        Text(
+            text = "Start Karaoke stays disabled until KaraVox has a real separated instrumental. The original song is never presented as a fake karaoke track.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         Button(
             onClick = {},
