@@ -1,5 +1,5 @@
 /**
- * Metrolist Project (C) 2026
+ * KaraVox Project (C) 2026
  * Licensed under GPL-3.0 | See git history for contributors
  */
 
@@ -16,7 +16,7 @@ import com.metrolist.music.karaoke.model.RecordingTake
 import com.metrolist.music.karaoke.model.ResolvedKaraokeAudio
 import com.metrolist.music.karaoke.model.SeparationQuality
 
-/** Resolves either an online Metrolist item or a local media item into playable audio. */
+/** Resolves either an online KaraVox item or a local media item into playable audio. */
 interface KaraokeAudioSourceResolver {
     suspend fun resolve(song: KaraokeSongRef): ResolvedKaraokeAudio
 }
@@ -31,6 +31,34 @@ interface VocalSeparator {
         quality: SeparationQuality,
         onProgress: (Float) -> Unit = {},
     ): AudioStemSet
+}
+
+/** Persistent cache for already-separated stems. */
+interface KaraokeStemCache {
+    suspend fun get(
+        audio: ResolvedKaraokeAudio,
+        quality: SeparationQuality,
+    ): AudioStemSet?
+
+    /** Returns the cache-owned stem set when persistence succeeds. */
+    suspend fun put(
+        audio: ResolvedKaraokeAudio,
+        quality: SeparationQuality,
+        stems: AudioStemSet,
+    ): AudioStemSet
+}
+
+object NoOpKaraokeStemCache : KaraokeStemCache {
+    override suspend fun get(
+        audio: ResolvedKaraokeAudio,
+        quality: SeparationQuality,
+    ): AudioStemSet? = null
+
+    override suspend fun put(
+        audio: ResolvedKaraokeAudio,
+        quality: SeparationQuality,
+        stems: AudioStemSet,
+    ): AudioStemSet = stems
 }
 
 /** A single lyric source (Better Lyrics, LRCLIB, local LRC/TTML, etc.). */
