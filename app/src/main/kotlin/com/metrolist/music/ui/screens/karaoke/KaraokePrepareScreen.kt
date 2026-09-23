@@ -32,6 +32,7 @@ import com.metrolist.music.karaoke.domain.KaraokeLyricsProvider
 import com.metrolist.music.karaoke.lyrics.BetterLyricsKaraokeProvider
 import com.metrolist.music.karaoke.lyrics.LrcLibKaraokeProvider
 import com.metrolist.music.karaoke.model.KaraokeLyrics
+import com.metrolist.music.karaoke.model.KaraokeSelectionStore
 import com.metrolist.music.karaoke.model.KaraokeSongRef
 import com.metrolist.music.karaoke.model.KaraokeSource
 import com.metrolist.music.karaoke.source.LocalKaraokeSourceResolver
@@ -66,6 +67,7 @@ fun KaraokePrepareScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val selectedSong = remember(songId) { KaraokeSelectionStore.get(songId) }
     val resolver: KaraokeAudioSourceResolver = remember(context, source) {
         when (source) {
             KaraokeSource.ONLINE -> MetrolistOnlineKaraokeSourceResolver(context.applicationContext)
@@ -86,8 +88,16 @@ fun KaraokePrepareScreen(
             songId
         }
     }
-    val resolvedTitle = title?.takeIf { it.isNotBlank() } ?: fallbackName
-    val resolvedArtist = artist.orEmpty()
+    val resolvedTitle = title?.takeIf { it.isNotBlank() }
+        ?: selectedSong?.title?.takeIf { it.isNotBlank() }
+        ?: fallbackName
+    val resolvedArtist = artist?.takeIf { it.isNotBlank() }
+        ?: selectedSong?.artist.orEmpty()
+    val resolvedDurationMs = durationSeconds
+        ?.takeIf { it > 0 }
+        ?.times(1_000L)
+        ?: selectedSong?.durationMs
+    val resolvedArtwork = artworkUrl?.takeIf { it.isNotBlank() } ?: selectedSong?.artworkUrl
 
     var sourceState: SourcePreparationUiState by remember(songId, source, mediaUri) {
         mutableStateOf(SourcePreparationUiState.Resolving)
@@ -96,7 +106,7 @@ fun KaraokePrepareScreen(
         mutableStateOf(LyricsPreparationUiState.Waiting)
     }
 
-    LaunchedEffect(songId, source, mediaUri, resolvedTitle, resolvedArtist, durationSeconds) {
+    LaunchedEffect(songId, source, mediaUri, resolvedTitle, resolvedArtist, resolvedDurationMs) {
         sourceState = SourcePreparationUiState.Resolving
         lyricsState = LyricsPreparationUiState.Waiting
 
@@ -105,8 +115,8 @@ fun KaraokePrepareScreen(
             title = resolvedTitle,
             artist = resolvedArtist,
             source = source,
-            durationMs = durationSeconds?.takeIf { it > 0 }?.times(1_000L),
-            artworkUrl = artworkUrl,
+            durationMs = resolvedDurationMs,
+            artworkUrl = resolvedArtwork,
             mediaUri = mediaUri,
         )
 
