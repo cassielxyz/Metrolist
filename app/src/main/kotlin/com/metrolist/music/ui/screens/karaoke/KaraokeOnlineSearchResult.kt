@@ -1,10 +1,11 @@
 /**
- * Metrolist Project (C) 2026
- * Licensed under GPL-3.0 | See git history for contributors
+ * KaraVox Project (C) 2026
+ * Licensed under GPL-3.0.
  */
 
 package com.metrolist.music.ui.screens.karaoke
 
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,7 +31,7 @@ import com.metrolist.music.LocalNavController
 import com.metrolist.music.ui.component.YouTubeListItem
 import com.metrolist.music.viewmodels.OnlineSearchViewModel
 
-/** Song-only search result surface for the dedicated karaoke flow. */
+/** Song-only search result surface for KaraVox. */
 @Composable
 fun KaraokeOnlineSearchResult(
     viewModel: OnlineSearchViewModel = hiltViewModel(),
@@ -87,7 +88,15 @@ fun KaraokeOnlineSearchResult(
                             isActive = false,
                             isPlaying = false,
                             modifier = Modifier.clickable {
-                                navController.navigate("karaoke_prepare/${song.id}")
+                                val artist = song.artists.joinToString(", ") { it.name }
+                                val route = buildString {
+                                    append("karaoke_prepare/${song.id}")
+                                    append("?title=${Uri.encode(song.title)}")
+                                    append("&artist=${Uri.encode(artist)}")
+                                    append("&duration=${song.duration ?: -1}")
+                                    append("&artwork=${Uri.encode(song.thumbnail)}")
+                                }
+                                navController.navigate(route)
                             },
                             trailingContent = {
                                 Text(
