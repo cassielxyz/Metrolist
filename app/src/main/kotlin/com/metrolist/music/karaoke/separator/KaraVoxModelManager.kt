@@ -26,7 +26,7 @@ sealed interface ModelInstallState {
     data class Invalid(val reason: String) : ModelInstallState
 }
 
-/** Runtime model storage with atomic download + SHA-256 verification. */
+/** Runtime model storage with resumable download, atomic finalization and SHA-256 verification. */
 class KaraVoxModelManager(
     private val context: Context,
 ) {
@@ -34,6 +34,8 @@ class KaraVoxModelManager(
         get() = File(context.filesDir, "karaoke/models").apply { mkdirs() }
 
     fun modelFile(spec: SeparatorModelSpec): File = File(modelDir, spec.fileName)
+
+    fun partialFile(spec: SeparatorModelSpec): File = File(modelDir, "${spec.fileName}.part")
 
     suspend fun inspect(spec: SeparatorModelSpec): ModelInstallState = withContext(Dispatchers.IO) {
         val file = modelFile(spec)
@@ -63,26 +65,33 @@ class KaraVoxModelManager(
             ?: error("${spec.displayName} is import-only; choose a compatible ONNX file manually")
 
         val target = modelFile(spec)
-        val partial = File(modelDir, "${spec.fileName}.part")
-        partial.delete()
-
-        val connection = (URL(downloadUrl).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 20_000
-            readTimeout = 45_000
-            instanceFollowRedirects = true
-            setRequestProperty("User-Agent", "KaraVox/0.1 Android")
-        }
+        val partial = partialFile(spec)
+        var resumeFrom = partial.takeIf { it.isFile }?.length()?.coerceAtLeast(0L) ?: 0L
+        var connection = openConnection(downloadUrl, resumeFrom)
 
         try {
             connection.connect()
+
+            // A server that ignores Range and responds with 200 must not be appended to an
+            // existing partial file. Restart cleanly in that case.
+            if (resumeFrom > 0L && connection.responseCode != HttpURLConnection.HTTP_PARTIAL) {
+                connection.disconnect()
+                partial.delete()
+                resumeFrom = 0L
+                connection = openConnection(downloadUrl, resumeFrom)
+                connection.connect()
+            }
+
             check(connection.responseCode in 200..299) {
                 "Model download failed with HTTP ${connection.responseCode}"
             }
-            val total = connection.contentLengthLong.takeIf { it > 0L } ?: spec.expectedBytes
-            var readTotal = 0L
+
+            val total = contentTotal(connection, resumeFrom) ?: spec.expectedBytes
+            var readTotal = resumeFrom
+            onProgress(ModelInstallState.Downloading(readTotal, total))
 
             BufferedInputStream(connection.inputStream).use { input ->
-                BufferedOutputStream(FileOutputStream(partial)).use { output ->
+                BufferedOutputStream(FileOutputStream(partial, resumeFrom > 0L)).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE * 4)
                     while (true) {
                         coroutineContext.ensureActive()
@@ -96,18 +105,19 @@ class KaraVoxModelManager(
                 }
             }
 
-            spec.expectedBytes?.let { expected ->
-                // Allow small metadata/content-length differences from mirrored release hosts,
-                // but reject obviously incomplete files before hashing.
-                check(partial.length() >= (expected * 0.95).toLong()) {
-                    "Downloaded model is incomplete"
+            val expectedSize = spec.expectedBytes ?: total
+            expectedSize?.let { expected ->
+                // Keep a valid prefix for the next retry when a connection ends early.
+                check(partial.length() >= (expected * 0.99).toLong()) {
+                    "Model download ended early at ${partial.length()} of about $expected bytes; retry to resume"
                 }
             }
 
             spec.sha256?.let { expectedSha ->
                 val actualSha = sha256(partial)
-                check(actualSha.equals(expectedSha, ignoreCase = true)) {
-                    "Model verification failed (SHA-256 mismatch)"
+                if (!actualSha.equals(expectedSha, ignoreCase = true)) {
+                    partial.delete()
+                    error("Model verification failed (SHA-256 mismatch); partial download was discarded")
                 }
             }
 
@@ -116,9 +126,6 @@ class KaraVoxModelManager(
                 "Could not finalize downloaded model"
             }
             target
-        } catch (error: Throwable) {
-            partial.delete()
-            throw error
         } finally {
             connection.disconnect()
         }
@@ -145,7 +152,39 @@ class KaraVoxModelManager(
         target
     }
 
-    fun delete(spec: SeparatorModelSpec): Boolean = modelFile(spec).let { !it.exists() || it.delete() }
+    fun delete(spec: SeparatorModelSpec): Boolean {
+        val finalDeleted = modelFile(spec).let { !it.exists() || it.delete() }
+        val partialDeleted = partialFile(spec).let { !it.exists() || it.delete() }
+        return finalDeleted && partialDeleted
+    }
+
+    private fun openConnection(url: String, resumeFrom: Long): HttpURLConnection =
+        (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 20_000
+            readTimeout = 45_000
+            instanceFollowRedirects = true
+            setRequestProperty("User-Agent", "KaraVox/0.1 Android")
+            setRequestProperty("Accept-Encoding", "identity")
+            if (resumeFrom > 0L) {
+                setRequestProperty("Range", "bytes=$resumeFrom-")
+            }
+        }
+
+    private fun contentTotal(connection: HttpURLConnection, resumeFrom: Long): Long? {
+        val contentRange = connection.getHeaderField("Content-Range")
+        val rangeTotal = contentRange
+            ?.substringAfter('/', missingDelimiterValue = "")
+            ?.takeIf { it.isNotBlank() && it != "*" }
+            ?.toLongOrNull()
+        if (rangeTotal != null) return rangeTotal
+
+        val contentLength = connection.contentLengthLong.takeIf { it > 0L } ?: return null
+        return if (connection.responseCode == HttpURLConnection.HTTP_PARTIAL) {
+            resumeFrom + contentLength
+        } else {
+            contentLength
+        }
+    }
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
