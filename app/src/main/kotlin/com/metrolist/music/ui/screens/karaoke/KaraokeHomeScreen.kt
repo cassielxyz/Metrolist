@@ -5,6 +5,9 @@
 
 package com.metrolist.music.ui.screens.karaoke
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,17 +25,33 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun KaraokeHomeScreen(
     onSearchOnline: () -> Unit,
-    onChooseOffline: () -> Unit,
+    onOfflineSongSelected: (String) -> Unit,
     onOpenDuetRoom: () -> Unit,
     onRecordLaterDuet: () -> Unit,
     onOpenRecordings: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val offlinePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            onOfflineSongSelected(uri.toString())
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -58,7 +77,7 @@ fun KaraokeHomeScreen(
             Text("Search online songs")
         }
         OutlinedButton(
-            onClick = onChooseOffline,
+            onClick = { offlinePicker.launch(arrayOf("audio/*")) },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Choose a song on this device")
