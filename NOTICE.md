@@ -16,12 +16,14 @@ Original Metrolist authors and contributors retain copyright and attribution for
 
 KaraVox's built-in model catalog is designed to download models at runtime instead of bundling large weights in the APK.
 
-The current Fast/Balanced catalog entries are UVR MDX-Net karaoke models:
+The current primary full-mix catalog entries are:
 
-- `UVR_MDXNET_KARA.onnx`
-- `UVR_MDXNET_KARA_2.onnx`
+- `UVR_MDXNET_3_9662.onnx` — Fast profile, predicts the vocal stem; the instrumental is reconstructed as the residual.
+- `UVR-MDX-NET-Inst_HQ_3.onnx` — Balanced profile, predicts the instrumental stem directly.
 
-Credit: Ultimate Vocal Remover (UVR) developers and the KUIELab MDX-Net architecture authors. UVR's project documentation asks third-party applications using its models to honor the MIT license and credit UVR and its developers. KaraVox stores SHA-256 pins for the supported model files and verifies them before use.
+An optional `UVR_MDXNET_KARA_2.onnx` entry is reserved as a **secondary lead-vs-backing-vocal stage** and is not treated as the main full-mix separator.
+
+Credit: Ultimate Vocal Remover (UVR) developers and the KUIELab MDX-Net architecture authors. UVR's project documentation asks third-party applications using its models to honor the MIT license and credit UVR and its developers. KaraVox stores SHA-256 pins for supported model files and verifies them before use.
 
 KaraVox does not automatically redistribute model weights without an explicit licensing basis. The `BEST` quality slot remains import-only until a higher-quality Android-suitable model is verified for redistribution, memory use, thermal behavior and performance.
 
