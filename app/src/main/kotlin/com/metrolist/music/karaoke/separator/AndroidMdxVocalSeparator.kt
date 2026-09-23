@@ -6,10 +6,8 @@
 package com.metrolist.music.karaoke.separator
 
 import android.content.Context
-import com.metrolist.music.karaoke.audio.AndroidAudioDecoder
+import com.metrolist.music.karaoke.audio.AndroidPcmFileDecoder
 import com.metrolist.music.karaoke.audio.KaraVoxAudioMaterializer
-import com.metrolist.music.karaoke.audio.Pcm16WavWriter
-import com.metrolist.music.karaoke.audio.StereoPcmAudio
 import com.metrolist.music.karaoke.domain.VocalSeparator
 import com.metrolist.music.karaoke.model.AudioStemSet
 import com.metrolist.music.karaoke.model.ResolvedKaraokeAudio
@@ -26,14 +24,14 @@ class SeparationModelMissingException(
 ) : IllegalStateException("${model.displayName} must be installed before separation")
 
 /**
- * Fully local KaraVox separator: materialize -> Android decode -> resample -> STFT/ONNX MDX -> WAV.
- * No microphone or source audio leaves the device.
+ * Fully local KaraVox separator: materialize -> streaming Android decode -> bounded-memory
+ * STFT/ONNX MDX -> streaming PCM16 WAV stems. No source or microphone audio leaves the device.
  */
 class AndroidMdxVocalSeparator(
     context: Context,
     private val modelManager: KaraVoxModelManager = KaraVoxModelManager(context),
     private val materializer: KaraVoxAudioMaterializer = KaraVoxAudioMaterializer(context),
-    private val decoder: AndroidAudioDecoder = AndroidAudioDecoder(),
+    private val decoder: AndroidPcmFileDecoder = AndroidPcmFileDecoder(),
 ) : VocalSeparator {
     private val appContext = context.applicationContext
 
@@ -55,54 +53,50 @@ class AndroidMdxVocalSeparator(
             onProgress((sourceProgress * 0.08f).coerceIn(0f, 0.08f))
         }
         currentCoroutineContext().ensureActive()
-        onProgress(0.09f)
 
-        val decoded = decoder.decode(localSource)
-        currentCoroutineContext().ensureActive()
-        val prepared = if (decoded.sampleRateHz == modelSpec.sampleRateHz) {
-            decoded
-        } else {
-            withContext(Dispatchers.Default) {
-                decoded.resample(modelSpec.sampleRateHz)
-            }
+        val identity = fingerprint(audio.cacheKey)
+        val workDir = File(appContext.cacheDir, "karaoke/separation-temp/$identity-${modelSpec.id}")
+        val decodedFile = File(appContext.cacheDir, "karaoke/decode-temp/$identity.pcm16.wav")
+        withContext(Dispatchers.IO) {
+            workDir.deleteRecursively()
+            check(workDir.mkdirs()) { "Unable to create KaraVox separation output directory" }
+            decodedFile.parentFile?.mkdirs()
+            decodedFile.delete()
         }
-        onProgress(0.15f)
 
-        val coroutineContext = currentCoroutineContext()
-        val separated = withContext(Dispatchers.Default) {
-            OnnxMdxModelRunner(installedModel, modelSpec).use { runner ->
-                MdxChunkedDemixer(mdxSpec, runner::run).separate(prepared.asChannels()) { progress ->
-                    coroutineContext.ensureActive()
-                    onProgress(0.15f + progress.coerceIn(0f, 1f) * 0.75f)
+        try {
+            onProgress(0.09f)
+            decoder.decode(localSource, decodedFile) { decodeProgress ->
+                onProgress(0.09f + decodeProgress.coerceIn(0f, 1f) * 0.11f)
+            }
+            currentCoroutineContext().ensureActive()
+
+            val callerContext = currentCoroutineContext()
+            val separated = withContext(Dispatchers.Default) {
+                OnnxMdxModelRunner(installedModel, modelSpec).use { runner ->
+                    StreamingMdxDemixer(mdxSpec, runner::run).separate(
+                        decodedPcmWav = decodedFile,
+                        outputDir = workDir,
+                        targetSampleRateHz = modelSpec.sampleRateHz,
+                    ) { progress ->
+                        callerContext.ensureActive()
+                        onProgress(0.20f + progress.coerceIn(0f, 1f) * 0.78f)
+                    }
                 }
             }
-        }
-        coroutineContext.ensureActive()
+            callerContext.ensureActive()
+            check(separated.instrumental.isFile && separated.instrumental.length() > 44L)
+            check(separated.vocals.isFile && separated.vocals.length() > 44L)
+            onProgress(1f)
 
-        val outputDir = File(
-            appContext.cacheDir,
-            "karaoke/separation-temp/${fingerprint(audio.cacheKey)}-${modelSpec.id}",
-        )
-        withContext(Dispatchers.IO) {
-            outputDir.deleteRecursively()
-            check(outputDir.mkdirs()) { "Unable to create KaraVox separation output directory" }
-            Pcm16WavWriter.write(
-                outputDir.resolve("instrumental.wav"),
-                StereoPcmAudio(modelSpec.sampleRateHz, separated.instrumental[0], separated.instrumental[1]),
+            return AudioStemSet(
+                instrumentalUri = separated.instrumental.toURI().toString(),
+                vocalsUri = separated.vocals.toURI().toString(),
+                sourceFingerprint = identity,
             )
-            onProgress(0.95f)
-            Pcm16WavWriter.write(
-                outputDir.resolve("vocals.wav"),
-                StereoPcmAudio(modelSpec.sampleRateHz, separated.vocals[0], separated.vocals[1]),
-            )
+        } finally {
+            withContext(Dispatchers.IO) { decodedFile.delete() }
         }
-        onProgress(1f)
-
-        return AudioStemSet(
-            instrumentalUri = outputDir.resolve("instrumental.wav").toURI().toString(),
-            vocalsUri = outputDir.resolve("vocals.wav").toURI().toString(),
-            sourceFingerprint = fingerprint(audio.cacheKey),
-        )
     }
 
     private fun fingerprint(value: String): String = MessageDigest.getInstance("SHA-256")
