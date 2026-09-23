@@ -124,7 +124,7 @@ fun KaraokeSessionScreen(
                 val captured = recorder.stop(recordingId)
                 val take = captured.copy(
                     syncMetadata = DuetSyncMetadata(
-                        startTimestampNs = recordingStartNs,
+                        localStartTimestampNs = recordingStartNs,
                         syncMarkerPositionMs = playbackStartOffsetMs,
                     ),
                 )
