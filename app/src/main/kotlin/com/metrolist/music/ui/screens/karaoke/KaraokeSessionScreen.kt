@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,8 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
+import com.metrolist.music.karaoke.audio.SynchronizedStemPlayer
+import com.metrolist.music.karaoke.cache.KaraokeSessionRepository
 import com.metrolist.music.karaoke.model.DuetSyncMetadata
 import com.metrolist.music.karaoke.model.KaraokeSessionStore
 import com.metrolist.music.karaoke.model.RecordingQuality
@@ -41,7 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Runtime host for a prepared karaoke session. Only the instrumental stem is played. */
+/** Runtime host for a prepared karaoke session with persistent crash/process recovery. */
 @Composable
 fun KaraokeSessionScreen(
     sessionId: String,
@@ -50,7 +51,16 @@ fun KaraokeSessionScreen(
     val context = LocalContext.current
     val appContext = context.applicationContext
     val coroutineScope = rememberCoroutineScope()
+    val sessionRepository = remember(appContext) { KaraokeSessionRepository(appContext) }
     var session by remember(sessionId) { mutableStateOf(KaraokeSessionStore.get(sessionId)) }
+    var loadingSession by remember(sessionId) { mutableStateOf(session == null) }
+
+    LaunchedEffect(sessionId) {
+        if (session == null) {
+            session = sessionRepository.load(sessionId)?.also(KaraokeSessionStore::put)
+        }
+        loadingSession = false
+    }
 
     val activeSession = session
     if (activeSession == null) {
@@ -61,26 +71,39 @@ fun KaraokeSessionScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Karaoke session expired",
+                text = if (loadingSession) "Loading karaoke…" else "Karaoke session unavailable",
                 style = MaterialTheme.typography.headlineSmall,
             )
-            Text("Prepare the song again. Cached instrumental stems are still kept on this device.")
-            Button(onClick = onBack) { Text("Back") }
+            if (!loadingSession) {
+                Text("Prepare the song again. KaraVox only restores sessions whose cached stems still exist.")
+                Button(onClick = onBack) { Text("Back") }
+            }
         }
         return
     }
 
-    val player = remember(activeSession.id, activeSession.stems.instrumentalUri) {
-        ExoPlayer.Builder(appContext).build().apply {
-            setMediaItem(MediaItem.fromUri(activeSession.stems.instrumentalUri))
-            prepare()
-        }
+    LaunchedEffect(activeSession.id, activeSession.lyrics) {
+        sessionRepository.save(activeSession)
+    }
+
+    val player = remember(
+        activeSession.id,
+        activeSession.stems.instrumentalUri,
+        activeSession.stems.vocalsUri,
+    ) {
+        SynchronizedStemPlayer(
+            appContext,
+            activeSession.stems.instrumentalUri,
+            activeSession.stems.vocalsUri,
+        )
     }
     val recorder = remember(appContext) { AndroidWavKaraokeRecorder(appContext) }
     val recordingRepository = remember(appContext) { KaraokeRecordingRepository(appContext) }
 
     var positionMs by remember(activeSession.id) { mutableLongStateOf(0L) }
     var isPlaying by remember(activeSession.id) { mutableStateOf(false) }
+    var vocalMix by remember(activeSession.id) { mutableFloatStateOf(0f) }
+    var mixBeforeRecording by remember(activeSession.id) { mutableFloatStateOf(0f) }
     var activeRecordingId by remember(activeSession.id) { mutableStateOf<String?>(null) }
     var recordingStartNs by remember(activeSession.id) { mutableLongStateOf(0L) }
     var playbackStartOffsetMs by remember(activeSession.id) { mutableLongStateOf(0L) }
@@ -96,6 +119,9 @@ fun KaraokeSessionScreen(
             runCatching {
                 player.pause()
                 player.seekTo(0L)
+                mixBeforeRecording = vocalMix
+                vocalMix = 0f
+                player.setVocalMix(0f)
 
                 val captureStart = System.nanoTime()
                 val recordingId = recorder.start(activeSession, RecordingQuality.STUDIO_WAV)
@@ -105,8 +131,10 @@ fun KaraokeSessionScreen(
                 activeRecordingId = recordingId
                 player.play()
             }.onSuccess {
-                recordingStatus = "Recording locally • tap Stop to save"
+                recordingStatus = "Recording locally • vocal guide muted"
             }.onFailure { error ->
+                vocalMix = mixBeforeRecording
+                player.setVocalMix(vocalMix)
                 recordingStatus = error.message ?: "Unable to start recording"
             }
             recordingStarting = false
@@ -135,6 +163,8 @@ fun KaraokeSessionScreen(
                 recordingStatus = error.message ?: "Unable to save recording"
             }
             activeRecordingId = null
+            vocalMix = mixBeforeRecording
+            player.setVocalMix(vocalMix)
             recordingStopping = false
         }
     }
@@ -142,37 +172,27 @@ fun KaraokeSessionScreen(
     val micPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) {
-            beginRecording()
-        } else {
-            recordingStatus = "Microphone permission is required to record"
-        }
+        if (granted) beginRecording()
+        else recordingStatus = "Microphone permission is required to record"
     }
 
     DisposableEffect(player) {
-        onDispose {
-            player.stop()
-            player.release()
-        }
+        onDispose { player.close() }
     }
 
-    // Each active recording owns its cleanup effect. Leaving the screen never intentionally keeps
-    // microphone capture running in the background. During a normal stop, recorder.stop removes
-    // the active handle before this cleanup observes the state transition, so cancel becomes a no-op.
     DisposableEffect(activeRecordingId) {
         val recordingToCancel = activeRecordingId
         onDispose {
             if (recordingToCancel != null) {
-                CoroutineScope(Dispatchers.IO).launch {
-                    recorder.cancel(recordingToCancel)
-                }
+                CoroutineScope(Dispatchers.IO).launch { recorder.cancel(recordingToCancel) }
             }
         }
     }
 
     LaunchedEffect(player) {
         while (true) {
-            positionMs = player.currentPosition.coerceAtLeast(0L)
+            player.maintainSync()
+            positionMs = player.currentPosition
             isPlaying = player.isPlaying
             delay(50L)
         }
@@ -182,14 +202,17 @@ fun KaraokeSessionScreen(
         lyrics = activeSession.lyrics,
         positionMs = positionMs,
         isPlaying = isPlaying,
-        vocalMix = 0f,
+        vocalMix = vocalMix,
+        onVocalMixChange = { value ->
+            if (activeRecordingId == null && !recordingStarting && !recordingStopping) {
+                vocalMix = value.coerceIn(0f, 1f)
+                player.setVocalMix(vocalMix)
+            }
+        },
         onTogglePlayback = {
             if (player.isPlaying) player.pause() else player.play()
         },
-        onRestart = {
-            player.seekTo(0L)
-            player.play()
-        },
+        onRestart = { player.restart() },
         onRecord = {
             if (activeRecordingId != null) {
                 stopRecording()
@@ -205,12 +228,11 @@ fun KaraokeSessionScreen(
         onLyricsOffsetChange = { offsetMs ->
             activeSession.lyrics?.let { lyrics ->
                 val updatedSession = activeSession.copy(
-                    lyrics = lyrics.copy(
-                        globalOffsetMs = offsetMs.coerceIn(-10_000L, 10_000L),
-                    ),
+                    lyrics = lyrics.copy(globalOffsetMs = offsetMs.coerceIn(-10_000L, 10_000L)),
                 )
                 KaraokeSessionStore.put(updatedSession)
                 session = updatedSession
+                coroutineScope.launch { sessionRepository.save(updatedSession) }
             }
         },
         isRecording = activeRecordingId != null || recordingStarting || recordingStopping,
