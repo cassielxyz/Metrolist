@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="karaoke_recordings">Recordings</string>
+    <string name="karaoke_title">Karaoke</string>
+    <string name="karaoke_duet_room">Private duet room</string>
+</resources>
