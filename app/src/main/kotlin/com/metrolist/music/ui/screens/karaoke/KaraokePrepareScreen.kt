@@ -6,6 +6,8 @@
 package com.metrolist.music.ui.screens.karaoke
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.metrolist.music.karaoke.domain.KaraokeAudioSourceResolver
 import com.metrolist.music.karaoke.domain.KaraokeLyricsProvider
 import com.metrolist.music.karaoke.lyrics.BetterLyricsKaraokeProvider
+import com.metrolist.music.karaoke.lyrics.LocalLyricsImporter
 import com.metrolist.music.karaoke.lyrics.LrcLibKaraokeProvider
 import com.metrolist.music.karaoke.model.KaraokeLyrics
 import com.metrolist.music.karaoke.model.KaraokeMode
@@ -134,10 +137,37 @@ fun KaraokePrepareScreen(
     var lyricsState: LyricsPreparationUiState by remember(songId) {
         mutableStateOf(LyricsPreparationUiState.Waiting)
     }
+    var lyricsImportError by remember(songId) { mutableStateOf<String?>(null) }
     var separationQuality by remember { mutableStateOf(SeparationQuality.BALANCED) }
     var modelState: ModelInstallState by remember { mutableStateOf(ModelInstallState.Missing) }
     var modelDownloadProgress by remember { mutableFloatStateOf(0f) }
     var separationState: SeparationUiState by remember(songId) { mutableStateOf(SeparationUiState.Idle) }
+
+    fun applyLyrics(lyrics: KaraokeLyrics) {
+        lyricsImportError = null
+        lyricsState = LyricsPreparationUiState.Ready(lyrics)
+        val ready = separationState as? SeparationUiState.Ready
+        if (ready != null) {
+            val updated = ready.session.copy(lyrics = lyrics)
+            KaraokeSessionStore.put(updated)
+            separationState = SeparationUiState.Ready(updated)
+        }
+    }
+
+    val lyricsPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { selectedUri ->
+        if (selectedUri != null) {
+            coroutineScope.launch {
+                runCatching {
+                    LocalLyricsImporter.import(appContext, selectedUri)
+                }.onSuccess(::applyLyrics)
+                    .onFailure { error ->
+                        lyricsImportError = error.message ?: "Unable to import lyrics"
+                    }
+            }
+        }
+    }
 
     val modelSpec = remember(separationQuality) { KaraVoxModelCatalog.forQuality(separationQuality) }
     val stemCache = remember(appContext, modelSpec.id) {
@@ -156,6 +186,7 @@ fun KaraokePrepareScreen(
     LaunchedEffect(songId, source, mediaUri, initialTitle, initialArtist, initialDurationMs) {
         sourceState = SourcePreparationUiState.Resolving
         lyricsState = LyricsPreparationUiState.Waiting
+        lyricsImportError = null
         resolvedAudio = null
         currentSong = null
         separationState = SeparationUiState.Idle
@@ -197,7 +228,7 @@ fun KaraokePrepareScreen(
 
                 if (effectiveTitle.isBlank() || effectiveArtist.isBlank()) {
                     lyricsState = LyricsPreparationUiState.Missing(
-                        "This file does not contain enough title/artist metadata. You can still prepare its instrumental and add local lyrics later.",
+                        "This file does not contain enough title/artist metadata. You can still prepare its instrumental and import local synced lyrics.",
                     )
                     return@onSuccess
                 }
@@ -215,7 +246,7 @@ fun KaraokePrepareScreen(
                     LyricsPreparationUiState.Ready(found)
                 } else {
                     LyricsPreparationUiState.Missing(
-                        "No synced lyrics found. KaraVox will allow local LRC/TTML import or manual sync.",
+                        "No online synced lyrics found. Import an LRC/Enhanced-LRC/TTML file or continue without lyrics.",
                     )
                 }
             }
@@ -444,6 +475,20 @@ fun KaraokePrepareScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             LyricsPreparationUiState.Waiting -> Unit
+        }
+
+        OutlinedButton(
+            onClick = {
+                lyricsPicker.launch(
+                    arrayOf("text/*", "application/xml", "text/xml", "application/octet-stream"),
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (lyricsState is LyricsPreparationUiState.Ready) "Replace lyrics file" else "Import LRC / TTML")
+        }
+        lyricsImportError?.let { error ->
+            Text(error, color = MaterialTheme.colorScheme.error)
         }
 
         when (val current = separationState) {
