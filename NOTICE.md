@@ -12,6 +12,19 @@ Upstream project:
 
 Original Metrolist authors and contributors retain copyright and attribution for their work. KaraVox does not claim authorship of inherited upstream code.
 
+## Vocal-separation models
+
+KaraVox's built-in model catalog is designed to download models at runtime instead of bundling large weights in the APK.
+
+The current Fast/Balanced catalog entries are UVR MDX-Net karaoke models:
+
+- `UVR_MDXNET_KARA.onnx`
+- `UVR_MDXNET_KARA_2.onnx`
+
+Credit: Ultimate Vocal Remover (UVR) developers and the KUIELab MDX-Net architecture authors. UVR's project documentation asks third-party applications using its models to honor the MIT license and credit UVR and its developers. KaraVox stores SHA-256 pins for the supported model files and verifies them before use.
+
+KaraVox does not automatically redistribute model weights without an explicit licensing basis. The `BEST` quality slot remains import-only until a higher-quality Android-suitable model is verified for redistribution, memory use, thermal behavior and performance.
+
 ## Other important upstream/integrated work
 
 The repository also contains or depends on open-source work including, but not limited to:
@@ -36,10 +49,11 @@ KaraVox adds and is developing a dedicated karaoke product layer including:
 - karaoke-first navigation and UI
 - online/local karaoke preparation pipeline
 - pluggable vocal-separation architecture
+- verified runtime model management
 - word-aware karaoke lyric model
 - private local recording architecture
 - recording-first private duet workflow
 - post-record timing correction and alignment architecture
 - karaoke-specific settings, caching, mixing, and export systems
 
-KaraVox is not affiliated with YouTube, Google, or the Metrolist project maintainers.
+KaraVox is not affiliated with YouTube, Google, Ultimate Vocal Remover, KUIELab, or the Metrolist project maintainers.
