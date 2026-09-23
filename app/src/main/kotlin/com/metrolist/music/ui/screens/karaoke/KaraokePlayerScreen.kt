@@ -1,5 +1,5 @@
 /**
- * Metrolist Project (C) 2026
+ * KaraVox Project (C) 2026
  * Licensed under GPL-3.0 | See git history for contributors
  */
 
@@ -28,10 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.metrolist.music.karaoke.model.KaraokeLine
 import com.metrolist.music.karaoke.model.KaraokeLyrics
 
-/**
- * Karaoke-first fullscreen lyric surface.
- * Word timing is rendered when available; line timing remains the fallback.
- */
+/** Karaoke-first fullscreen lyric surface with word timing and manual lyric offset correction. */
 @Composable
 fun KaraokePlayerScreen(
     lyrics: KaraokeLyrics?,
@@ -41,8 +38,10 @@ fun KaraokePlayerScreen(
     onTogglePlayback: () -> Unit,
     onRestart: () -> Unit,
     onRecord: () -> Unit,
+    onLyricsOffsetChange: (Long) -> Unit = {},
 ) {
-    val adjustedPosition = positionMs + (lyrics?.globalOffsetMs ?: 0L)
+    val lyricOffsetMs = lyrics?.globalOffsetMs ?: 0L
+    val adjustedPosition = positionMs + lyricOffsetMs
     val lines = lyrics?.lines.orEmpty()
     val currentIndex = lines.indexOfLast { adjustedPosition >= it.startMs }
         .coerceAtLeast(0)
@@ -101,6 +100,30 @@ fun KaraokePlayerScreen(
                 color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.bodySmall,
             )
+            if (lyrics != null) {
+                Text(
+                    text = "Lyrics offset ${if (lyricOffsetMs >= 0) "+" else ""}${lyricOffsetMs} ms",
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { onLyricsOffsetChange(lyricOffsetMs - 50L) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("-50 ms") }
+                    OutlinedButton(
+                        onClick = { onLyricsOffsetChange(0L) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Reset") }
+                    OutlinedButton(
+                        onClick = { onLyricsOffsetChange(lyricOffsetMs + 50L) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("+50 ms") }
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
