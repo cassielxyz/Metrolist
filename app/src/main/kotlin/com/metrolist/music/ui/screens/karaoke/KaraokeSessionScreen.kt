@@ -36,9 +36,10 @@ fun KaraokeSessionScreen(
     onRecord: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val session = remember(sessionId) { KaraokeSessionStore.get(sessionId) }
+    var session by remember(sessionId) { mutableStateOf(KaraokeSessionStore.get(sessionId)) }
 
-    if (session == null) {
+    val activeSession = session
+    if (activeSession == null) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -55,14 +56,14 @@ fun KaraokeSessionScreen(
         return
     }
 
-    val player = remember(session.id, session.stems.instrumentalUri) {
+    val player = remember(activeSession.id, activeSession.stems.instrumentalUri) {
         ExoPlayer.Builder(context.applicationContext).build().apply {
-            setMediaItem(MediaItem.fromUri(session.stems.instrumentalUri))
+            setMediaItem(MediaItem.fromUri(activeSession.stems.instrumentalUri))
             prepare()
         }
     }
-    var positionMs by remember(session.id) { mutableLongStateOf(0L) }
-    var isPlaying by remember(session.id) { mutableStateOf(false) }
+    var positionMs by remember(activeSession.id) { mutableLongStateOf(0L) }
+    var isPlaying by remember(activeSession.id) { mutableStateOf(false) }
 
     DisposableEffect(player) {
         onDispose {
@@ -80,7 +81,7 @@ fun KaraokeSessionScreen(
     }
 
     KaraokePlayerScreen(
-        lyrics = session.lyrics,
+        lyrics = activeSession.lyrics,
         positionMs = positionMs,
         isPlaying = isPlaying,
         vocalMix = 0f,
@@ -91,6 +92,17 @@ fun KaraokeSessionScreen(
             player.seekTo(0L)
             player.play()
         },
-        onRecord = { onRecord(session.id) },
+        onRecord = { onRecord(activeSession.id) },
+        onLyricsOffsetChange = { offsetMs ->
+            activeSession.lyrics?.let { lyrics ->
+                val updatedSession = activeSession.copy(
+                    lyrics = lyrics.copy(
+                        globalOffsetMs = offsetMs.coerceIn(-10_000L, 10_000L),
+                    ),
+                )
+                KaraokeSessionStore.put(updatedSession)
+                session = updatedSession
+            }
+        },
     )
 }
