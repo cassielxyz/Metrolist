@@ -52,7 +52,10 @@ class KaraokeRecordingRepository(
             setProperty("artist", session.song.artist)
             setProperty("createdAtEpochMs", createdAtEpochMs.toString())
             take.syncMetadata?.let { sync ->
-                setProperty("startTimestampNs", sync.startTimestampNs.toString())
+                setProperty("localStartTimestampNs", sync.localStartTimestampNs.toString())
+                sync.roomStartErrorMs?.let {
+                    setProperty("roomStartErrorMs", it.toString())
+                }
                 sync.syncMarkerPositionMs?.let {
                     setProperty("syncMarkerPositionMs", it.toString())
                 }
@@ -94,9 +97,10 @@ class KaraokeRecordingRepository(
         val vocalFile = fileFromUri(vocalUri) ?: return@runCatching null
         if (!vocalFile.isFile || vocalFile.length() <= 44L) return@runCatching null
 
-        val sync = properties.getProperty("startTimestampNs")?.toLongOrNull()?.let { startNs ->
+        val sync = properties.getProperty("localStartTimestampNs")?.toLongOrNull()?.let { startNs ->
             DuetSyncMetadata(
-                startTimestampNs = startNs,
+                localStartTimestampNs = startNs,
+                roomStartErrorMs = properties.getProperty("roomStartErrorMs")?.toLongOrNull(),
                 syncMarkerPositionMs = properties.getProperty("syncMarkerPositionMs")?.toLongOrNull(),
                 deviceLatencyMs = properties.getProperty("deviceLatencyMs")?.toLongOrNull() ?: 0L,
                 manualOffsetMs = properties.getProperty("manualOffsetMs")?.toLongOrNull() ?: 0L,
