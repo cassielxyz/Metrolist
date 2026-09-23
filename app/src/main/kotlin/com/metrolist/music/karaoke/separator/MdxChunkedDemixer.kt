@@ -80,7 +80,11 @@ class MdxChunkedDemixer(
                 }
             }
 
-            val spectrum = processor.forward(inputChunk, zeroLowestBins = 3)
+            // Classic MDX-Net feeds the complete retained spectrum into the model. The previous
+            // hard-coded three-bin suppression removed real low-frequency content and broke an
+            // identity STFT/ISTFT round trip, so keep all bins here and reserve suppression for
+            // callers that explicitly request it from MdxSpectrogramProcessor.
+            val spectrum = processor.forward(inputChunk, zeroLowestBins = 0)
             val predictedSpectrum = runModel(spectrum)
             require(predictedSpectrum.size == processor.tensorElementCount) {
                 "MDX model returned ${predictedSpectrum.size} values; expected ${processor.tensorElementCount}"
