@@ -10,7 +10,6 @@ import com.metrolist.music.karaoke.model.KaraokeWord
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import java.io.ByteArrayInputStream
-import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.math.roundToLong
 
@@ -19,6 +18,11 @@ import kotlin.math.roundToLong
  * External entities and DTD loading are disabled because imported lyric files are untrusted input.
  */
 object KaraokeTtmlParser {
+    private const val ACCESS_EXTERNAL_DTD_PROPERTY =
+        "http://javax.xml.XMLConstants/property/accessExternalDTD"
+    private const val ACCESS_EXTERNAL_SCHEMA_PROPERTY =
+        "http://javax.xml.XMLConstants/property/accessExternalSchema"
+
     fun parse(input: String): List<KaraokeLine> {
         if (input.isBlank()) return emptyList()
         val factory = DocumentBuilderFactory.newInstance().apply {
@@ -29,8 +33,8 @@ object KaraokeTtmlParser {
             runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
             runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
             runCatching { setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false) }
-            runCatching { setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "") }
-            runCatching { setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "") }
+            runCatching { setAttribute(ACCESS_EXTERNAL_DTD_PROPERTY, "") }
+            runCatching { setAttribute(ACCESS_EXTERNAL_SCHEMA_PROPERTY, "") }
         }
         val document = factory.newDocumentBuilder().parse(
             ByteArrayInputStream(input.toByteArray(Charsets.UTF_8)),
