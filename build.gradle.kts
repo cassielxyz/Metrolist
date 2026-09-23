@@ -22,6 +22,16 @@ tasks.register<Delete>("clean") {
 }
 
 subprojects {
+    // KaraVox separation is kept in the app module while the inherited project structure is
+    // gradually reduced. Keeping these dependencies centralized avoids touching unrelated
+    // upstream module declarations during the migration.
+    if (name == "app") {
+        dependencies {
+            add("implementation", libs.onnxruntime.android)
+            add("implementation", libs.jtransforms)
+        }
+    }
+
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
         compilerOptions {
             if (project.findProperty("enableComposeCompilerReports") == "true") {
