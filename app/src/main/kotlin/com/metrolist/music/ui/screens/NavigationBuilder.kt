@@ -1,5 +1,5 @@
 /**
- * Metrolist Project (C) 2026
+ * KaraVox Project (C) 2026
  * Licensed under GPL-3.0 | See git history for contributors
  */
 
@@ -38,6 +38,7 @@ import com.metrolist.music.ui.screens.karaoke.KaraokeHomeScreen
 import com.metrolist.music.ui.screens.karaoke.KaraokeOnlineSearchResult
 import com.metrolist.music.ui.screens.karaoke.KaraokePrepareScreen
 import com.metrolist.music.ui.screens.karaoke.KaraokeRecordingsScreen
+import com.metrolist.music.ui.screens.karaoke.KaraokeSessionScreen
 import com.metrolist.music.ui.screens.library.LibraryScreen
 import com.metrolist.music.ui.screens.playlist.AutoPlaylistScreen
 import com.metrolist.music.ui.screens.playlist.CachePlaylistScreen
@@ -213,6 +214,9 @@ fun NavGraphBuilder.navigationBuilder(
         KaraokePrepareScreen(
             songId = backStackEntry.arguments?.getString("videoId").orEmpty(),
             source = KaraokeSource.ONLINE,
+            onStartKaraoke = { sessionId ->
+                navController.navigate("karaoke_session/${Uri.encode(sessionId)}")
+            },
             onBack = { navController.popBackStack() },
         )
     }
@@ -230,6 +234,23 @@ fun NavGraphBuilder.navigationBuilder(
             songId = "local-${mediaUri.hashCode()}",
             source = KaraokeSource.LOCAL,
             mediaUri = mediaUri,
+            onStartKaraoke = { sessionId ->
+                navController.navigate("karaoke_session/${Uri.encode(sessionId)}")
+            },
+            onBack = { navController.popBackStack() },
+        )
+    }
+
+    composable(
+        route = "karaoke_session/{sessionId}",
+        arguments = listOf(
+            navArgument("sessionId") {
+                type = NavType.StringType
+            },
+        ),
+    ) { backStackEntry ->
+        KaraokeSessionScreen(
+            sessionId = backStackEntry.arguments?.getString("sessionId").orEmpty(),
             onBack = { navController.popBackStack() },
         )
     }
