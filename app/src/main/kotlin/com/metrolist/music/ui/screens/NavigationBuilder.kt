@@ -31,6 +31,9 @@ import com.metrolist.music.ui.screens.artist.ArtistScreen
 import com.metrolist.music.ui.screens.artist.ArtistSongsScreen
 import com.metrolist.music.ui.screens.equalizer.EqScreen
 import com.metrolist.music.ui.screens.equalizer.wizard.WizardScreen
+import com.metrolist.music.ui.screens.karaoke.DuetRecordingRoomScreen
+import com.metrolist.music.ui.screens.karaoke.KaraokeHomeScreen
+import com.metrolist.music.ui.screens.karaoke.KaraokeRecordingsScreen
 import com.metrolist.music.ui.screens.library.LibraryScreen
 import com.metrolist.music.ui.screens.playlist.AutoPlaylistScreen
 import com.metrolist.music.ui.screens.playlist.CachePlaylistScreen
@@ -61,7 +64,6 @@ import com.metrolist.music.ui.screens.settings.integrations.DiscordSettings
 import com.metrolist.music.ui.screens.settings.integrations.IntegrationScreen
 import com.metrolist.music.ui.screens.settings.integrations.LastFMSettings
 import com.metrolist.music.ui.screens.settings.integrations.ListenTogetherSettings
-
 import com.metrolist.music.ui.screens.wrapped.WrappedScreen
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
@@ -75,7 +77,13 @@ fun NavGraphBuilder.navigationBuilder(
     snackbarHostState: SnackbarHostState,
 ) {
     composable(Screens.Home.route) {
-        HomeScreen(snackbarHostState = snackbarHostState)
+        KaraokeHomeScreen(
+            onSearchOnline = { navController.navigate(Screens.Search.route) },
+            onChooseOffline = { navController.navigate(Screens.Library.route) },
+            onOpenDuetRoom = { navController.navigate(Screens.ListenTogether.route) },
+            onRecordLaterDuet = { navController.navigate(Screens.ListenTogether.route) },
+            onOpenRecordings = { navController.navigate(Screens.Recordings.route) },
+        )
     }
 
     composable(Screens.Search.route) { backStackEntry ->
@@ -100,14 +108,22 @@ fun NavGraphBuilder.navigationBuilder(
         LibraryScreen()
     }
 
+    composable(Screens.Recordings.route) {
+        KaraokeRecordingsScreen()
+    }
+
     composable(Screens.ListenTogether.route) {
-        ListenTogetherScreen(navController, showTopBar = false)
+        DuetRecordingRoomScreen(
+            onBack = { navController.popBackStack() },
+        )
     }
 
     composable(
         route = "listen_together_from_topbar",
     ) {
-        ListenTogetherScreen(navController, showTopBar = true)
+        DuetRecordingRoomScreen(
+            onBack = { navController.popBackStack() },
+        )
     }
 
     composable("history") {
