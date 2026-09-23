@@ -39,6 +39,8 @@ fun KaraokePlayerScreen(
     onRestart: () -> Unit,
     onRecord: () -> Unit,
     onLyricsOffsetChange: (Long) -> Unit = {},
+    isRecording: Boolean = false,
+    recordingStatus: String? = null,
 ) {
     val lyricOffsetMs = lyrics?.globalOffsetMs ?: 0L
     val adjustedPosition = positionMs + lyricOffsetMs
@@ -95,6 +97,14 @@ fun KaraokePlayerScreen(
                 .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            recordingStatus?.let { status ->
+                Text(
+                    text = status,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isRecording) FontWeight.Bold else FontWeight.Normal,
+                )
+            }
             Text(
                 text = "Practice vocal mix ${(vocalMix.coerceIn(0f, 1f) * 100).toInt()}%",
                 color = Color.White.copy(alpha = 0.7f),
@@ -131,6 +141,7 @@ fun KaraokePlayerScreen(
                 OutlinedButton(
                     onClick = onRestart,
                     modifier = Modifier.weight(1f),
+                    enabled = !isRecording,
                 ) {
                     Text("Restart")
                 }
@@ -144,7 +155,7 @@ fun KaraokePlayerScreen(
                     onClick = onRecord,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("Record")
+                    Text(if (isRecording) "Stop" else "Record")
                 }
             }
         }
