@@ -1,6 +1,6 @@
 /**
  * KaraVox Project (C) 2026
- * Licensed under GPL-3.0 | See git history for contributors
+ * Licensed under GPL-3.0.
  */
 
 package com.metrolist.music.ui.screens.karaoke
@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,6 +36,7 @@ fun KaraokePlayerScreen(
     positionMs: Long,
     isPlaying: Boolean,
     vocalMix: Float,
+    onVocalMixChange: (Float) -> Unit,
     onTogglePlayback: () -> Unit,
     onRestart: () -> Unit,
     onRecord: () -> Unit,
@@ -57,7 +59,7 @@ fun KaraokePlayerScreen(
     ) {
         if (lines.isEmpty()) {
             Text(
-                text = "Synced lyrics are not available yet",
+                text = "Synced lyrics are not available",
                 modifier = Modifier.align(Alignment.Center),
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White,
@@ -72,7 +74,7 @@ fun KaraokePlayerScreen(
                     Text(
                         text = line.text,
                         style = MaterialTheme.typography.titleLarge,
-                        color = Color.White.copy(alpha = 0.45f),
+                        color = Color.White.copy(alpha = 0.42f),
                     )
                 }
 
@@ -85,7 +87,7 @@ fun KaraokePlayerScreen(
                     Text(
                         text = line.text,
                         style = MaterialTheme.typography.titleLarge,
-                        color = Color.White.copy(alpha = 0.65f),
+                        color = Color.White.copy(alpha = 0.68f),
                     )
                 }
             }
@@ -95,7 +97,7 @@ fun KaraokePlayerScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             recordingStatus?.let { status ->
                 Text(
@@ -106,9 +108,15 @@ fun KaraokePlayerScreen(
                 )
             }
             Text(
-                text = "Practice vocal mix ${(vocalMix.coerceIn(0f, 1f) * 100).toInt()}%",
-                color = Color.White.copy(alpha = 0.7f),
+                text = "Vocal guide ${(vocalMix.coerceIn(0f, 1f) * 100).toInt()}%",
+                color = Color.White.copy(alpha = 0.78f),
                 style = MaterialTheme.typography.bodySmall,
+            )
+            Slider(
+                value = vocalMix.coerceIn(0f, 1f),
+                onValueChange = onVocalMixChange,
+                enabled = !isRecording,
+                modifier = Modifier.fillMaxWidth(),
             )
             if (lyrics != null) {
                 Text(
