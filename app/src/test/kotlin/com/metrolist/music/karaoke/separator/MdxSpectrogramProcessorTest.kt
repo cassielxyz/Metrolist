@@ -25,7 +25,7 @@ class MdxSpectrogramProcessorTest {
     }
 
     @Test
-    fun fullBandForwardInverseRoundTripPreservesStereoWaveform() {
+    fun fullBandForwardInverseRoundTripPreservesStereoWaveformByDefault() {
         val processor = MdxSpectrogramProcessor(dsp)
         val left = FloatArray(processor.chunkSize) { index ->
             (0.45 * sin(2.0 * PI * 5.0 * index / 256.0)).toFloat()
@@ -34,7 +34,7 @@ class MdxSpectrogramProcessorTest {
             (0.30 * sin(2.0 * PI * 11.0 * index / 256.0)).toFloat()
         }
 
-        val tensor = processor.forward(arrayOf(left, right), zeroLowestBins = 0)
+        val tensor = processor.forward(arrayOf(left, right))
         val reconstructed = processor.inverse(tensor)
 
         val maxLeftError = left.indices.maxOf { abs(left[it] - reconstructed[0][it]).toDouble() }
@@ -57,5 +57,13 @@ class MdxSpectrogramProcessorTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun rejectsInvalidLowFrequencySuppressionCount() {
+        val processor = MdxSpectrogramProcessor(dsp)
+        val stereo = Array(2) { FloatArray(processor.chunkSize) }
+        assertTrue(runCatching { processor.forward(stereo, zeroLowestBins = -1) }.isFailure)
+        assertTrue(runCatching { processor.forward(stereo, zeroLowestBins = dsp.dimF + 1) }.isFailure)
     }
 }

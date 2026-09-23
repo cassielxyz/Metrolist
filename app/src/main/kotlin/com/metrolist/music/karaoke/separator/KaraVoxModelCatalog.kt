@@ -50,7 +50,7 @@ object KaraVoxModelCatalog {
         fileName = "UVR_MDXNET_3_9662.onnx",
         downloadUrl = "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR_MDXNET_3_9662.onnx",
         sha256 = "e02220e80d8253f4c2209f8924298b2b686bbdf2868b788ff5500fb9bd94aadc",
-        expectedBytes = 29_700_000L,
+        expectedBytes = 29_704_436L,
         sampleRateHz = 44_100,
         mdx = MdxDspSpec(
             nFft = 6_144,
@@ -72,7 +72,7 @@ object KaraVoxModelCatalog {
         fileName = "UVR-MDX-NET-Inst_HQ_3.onnx",
         downloadUrl = "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Inst_HQ_3.onnx",
         sha256 = "317554b07fe1ea5279a77f2b1520a41ea4b93432560c4ffd08792c30fddf9adc",
-        expectedBytes = 66_800_000L,
+        expectedBytes = 66_759_214L,
         sampleRateHz = 44_100,
         mdx = MdxDspSpec(
             nFft = 6_144,

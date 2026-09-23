@@ -68,7 +68,7 @@ The project is designed around privacy:
 - Better Lyrics integration
 - LRCLIB fallback
 - LRC and Enhanced LRC support
-- TTML support planned in the karaoke adapter layer
+- TTML import and timed-span mapping
 - Word-by-word highlighting when timing is available
 - Line-level fallback when word timing is unavailable
 - Manual lyric offset and sync correction
@@ -76,12 +76,10 @@ The project is designed around privacy:
 ### Recording
 
 - Separate microphone recording from instrumental playback
-- Standard / High / Studio recording profiles
-- AAC / FLAC / WAV targets
-- Optional noise suppression
-- Optional echo cancellation
-- Compressor and normalization pipeline
-- Non-destructive mixing after recording
+- Standard / High / Studio recording profiles in the domain model
+- Verified PCM16 WAV capture baseline
+- Optional future AAC / FLAC encoder backends
+- Non-destructive mixing architecture
 
 ### Private duet mode
 
@@ -120,43 +118,49 @@ KaraVox also supports the architecture for **Record Later Duet**, where one sing
 
 ## Current implementation status
 
-The current development branch is building the karaoke-first foundation.
+The current development branch contains the karaoke-first foundation plus the first production-oriented local processing path.
 
 Implemented so far:
 
 - karaoke domain models and service contracts
 - shared online/local preparation coordinator
 - online source resolver adapter
-- local source resolver adapter
-- karaoke-first Home screen
-- dedicated Recordings destination
-- dedicated offline audio picker
-- karaoke-only online song result flow
+- local SAF/content-URI resolver and local metadata reader
+- karaoke-first Home/Search/Library/Recordings navigation foundation
+- dedicated offline audio picker and online song result flow
 - preparation screen for online and local songs
+- verified Fast and Balanced UVR MDX model catalog entries with SHA-256 checks
+- resumable model download/import manager
+- ONNX Runtime MDX runner
+- STFT / iSTFT / overlapping chunk inference pipeline
+- persistent prepared-stem file cache
 - fullscreen karaoke lyric renderer
-- word-aware lyric model
+- Better Lyrics + LRCLIB adapters
 - LRC / Enhanced LRC parser
-- Better Lyrics adapter
-- LRCLIB adapter
-- recording-first private duet room shell
-- manual duet timing correction control
+- TTML parser/import with timed spans and hardened XML handling
+- manual lyric offset adjustment
+- PCM16 WAV microphone recording baseline
+- local recording repository and recording list foundation
+- recording-first private duet room shell and manual timing correction model
 - karaoke preference model and persistent preference keys
-- karaoke/recording settings screen foundation
+- KaraVox-specific settings foundation
+- contributor CI for source policy, FOSS unit tests, lint and debug APK build
 - full architecture plan in `docs/KARAOKE_ARCHITECTURE.md`
 
-Still in progress:
+Still in progress before a production release:
 
-- production mobile vocal-separation engine
-- prepared-stem persistent cache implementation
-- metadata handoff from search to preparation
-- complete TTML karaoke mapping
-- microphone recording backend
-- FLAC/WAV encoder path
-- duet take exchange
-- automatic sync-marker detection
-- waveform cross-correlation alignment
-- post-record mixer/export
-- complete removal of remaining normal-player-oriented routes and settings
+- reduce separation peak memory for normal multi-minute songs and complete Android thermal/memory benchmarks
+- verify long-session separation on real Android devices
+- validate word-level timing quality across real Better Lyrics responses
+- tap-to-sync/manual lyric editor and persistent lyric cache/versioning
+- AAC/FLAC recording backends and device-capability-aware lossless capture
+- countdown/sync-marker generation and automatic detection
+- waveform cross-correlation duet alignment
+- non-destructive effects/mixer and export pipeline
+- duet take exchange / Record Later package transport
+- storage quotas and cleanup UI
+- complete removal of remaining normal-player/social routes and settings
+- accessibility, localization, crash-recovery and release-device verification
 
 ---
 
@@ -165,15 +169,15 @@ Still in progress:
 ```text
 app/
 └─ karaoke/
-   ├─ model/
+   ├─ audio/
    ├─ domain/
-   ├─ source/
-   ├─ separator/
-   ├─ lyrics/
-   ├─ recording/
    ├─ duet/
-   ├─ cache/
-   └─ settings/
+   ├─ lyrics/
+   ├─ model/
+   ├─ recording/
+   ├─ separator/
+   ├─ settings/
+   └─ source/
 ```
 
 The karaoke domain is intentionally separated from Android/UI-specific code so source resolution, separation models, lyrics providers, recorders, and alignment engines can be replaced independently.
@@ -194,7 +198,7 @@ Typical local build:
 ./gradlew assembleFossDebug
 ```
 
-The project CI builds and lints the FOSS debug variant for pull requests.
+The pull-request verification workflow runs FOSS unit tests, Android lint and `assembleFossDebug`, then uploads the verified debug APK when successful.
 
 ---
 
@@ -208,38 +212,14 @@ Important upstream/integrated projects include:
 
 - Metrolist
 - InnerTune / OuterTune-derived components
+- Ultimate Vocal Remover (UVR) / MDX-Net model ecosystem
 - Better Lyrics
 - LRCLIB
 - AndroidX Media3
 - other libraries listed in the repository's dependency files and license notices
 
-KaraVox is developed as its own karaoke-focused product. It is not affiliated with YouTube or Google.
+KaraVox is developed as its own karaoke-focused product. It is not affiliated with YouTube, Google, Ultimate Vocal Remover, KUIELab, or Metrolist maintainers.
 
 See `LICENSE` and `NOTICE.md` for attribution details.
 
 ---
-
-## Project direction
-
-The final product should feel like this:
-
-```text
-KaraVox
-├─ Home
-├─ Search
-├─ Library
-├─ Recordings
-└─ Settings
-
-Song
- ↓
-Prepare Karaoke
- ↓
-Instrumental + Synced Lyrics
- ↓
-Solo / Private Duet / Record Later
- ↓
-Mix + Export
-```
-
-No normal music-player-first experience. Karaoke is the product.

@@ -42,8 +42,11 @@ class MdxSpectrogramProcessor(
     val tensorElementCount: Int
         get() = 4 * dimF * dimT
 
-    fun forward(stereo: Array<FloatArray>, zeroLowestBins: Int = 3): FloatArray {
+    fun forward(stereo: Array<FloatArray>, zeroLowestBins: Int = 0): FloatArray {
         requireStereoChunk(stereo)
+        require(zeroLowestBins in 0..dimF) {
+            "zeroLowestBins must be between 0 and $dimF"
+        }
         val output = FloatArray(tensorElementCount)
         val frame = FloatArray(nFft * 2)
         val centerPad = nFft / 2

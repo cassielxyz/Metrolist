@@ -44,4 +44,17 @@ class KaraokeTtmlParserTest {
         assertEquals(62_250L, KaraokeTtmlParser.parseTime("00:01:02.250"))
         assertTrue(KaraokeTtmlParser.parseTime("frames:bad") == null)
     }
+
+    @Test
+    fun rejectsDoctypeAndExternalEntityInput() {
+        val unsafe = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE tt [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+            <tt xmlns="http://www.w3.org/ns/ttml">
+              <body><div><p begin="0s" end="1s">&xxe;</p></div></body>
+            </tt>
+        """.trimIndent()
+
+        assertTrue(runCatching { KaraokeTtmlParser.parse(unsafe) }.isFailure)
+    }
 }
