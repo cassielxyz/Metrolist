@@ -101,9 +101,10 @@ class OnnxMdxModelRunner(
 
         OnnxTensor.createTensor(environment, floatBuffer, tensorShape).use { tensor ->
             session.run(mapOf(inputName to tensor)).use { result ->
-                val output = result[outputName].orElse(null)
-                    ?: result[0]
-                val outputTensor = output as? OnnxTensor
+                // Output names are ordered by ONNX output id. We validate the first output's
+                // declared metadata during construction, so index access avoids Optional/JVM
+                // interop ambiguity while keeping the contract deterministic.
+                val outputTensor = result[0] as? OnnxTensor
                     ?: error("MDX output '$outputName' is not a tensor")
                 validateTensorInfo(
                     label = "runtime output '$outputName'",
