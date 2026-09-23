@@ -1,5 +1,5 @@
 /**
- * Metrolist Project (C) 2026
+ * KaraVox Project (C) 2026
  * Licensed under GPL-3.0 | See git history for contributors
  */
 
@@ -14,13 +14,14 @@ import com.metrolist.music.karaoke.model.SeparationQuality
 /**
  * Shared preparation pipeline used by online and local karaoke entries.
  *
- * Resolve source -> separate vocals -> resolve lyrics -> create one immutable session.
+ * Resolve source -> reuse/separate vocals -> resolve lyrics -> create one immutable session.
  * Keeping this coordinator free of Android/UI types makes it straightforward to test.
  */
 class KaraokePreparationCoordinator(
     private val sourceResolver: KaraokeAudioSourceResolver,
     private val vocalSeparator: VocalSeparator,
     private val lyricsProviders: List<KaraokeLyricsProvider>,
+    private val stemCache: KaraokeStemCache = NoOpKaraokeStemCache,
 ) {
     suspend fun prepare(
         song: KaraokeSongRef,
@@ -32,9 +33,16 @@ class KaraokePreparationCoordinator(
             onState(KaraokePreparationState.ResolvingSource)
             val source = sourceResolver.resolve(song)
 
-            onState(KaraokePreparationState.Separating(0f))
-            val stems = vocalSeparator.separate(source, quality) { progress ->
-                onState(KaraokePreparationState.Separating(progress.coerceIn(0f, 1f)))
+            val cachedStems = stemCache.get(source, quality)
+            val stems = if (cachedStems != null) {
+                onState(KaraokePreparationState.Separating(1f))
+                cachedStems
+            } else {
+                onState(KaraokePreparationState.Separating(0f))
+                val separated = vocalSeparator.separate(source, quality) { progress ->
+                    onState(KaraokePreparationState.Separating(progress.coerceIn(0f, 1f)))
+                }
+                stemCache.put(source, quality, separated)
             }
 
             onState(KaraokePreparationState.LoadingLyrics)
