@@ -1,9 +1,10 @@
-# Karaoke-first architecture
+# KaraVox architecture
 
-This fork turns Metrolist into a dedicated private karaoke application. Metrolist remains the media/search/settings foundation, while the user-facing product becomes karaoke-first.
+KaraVox is a dedicated private karaoke application for Android. The project reuses proven open-source media/search components inherited from Metrolist, but the product, navigation, recording flow and karaoke domain are KaraVox-specific. Upstream copyright and GPL attribution are retained in source history, `LICENSE`, and `NOTICE.md`.
 
 ## Product rules
 
+- Karaoke is the product; normal music-player UI is not a primary experience.
 - No social feed, followers, public profile, or automatic publishing.
 - Online and local songs share one karaoke preparation pipeline.
 - Lead-vocal separation is pluggable and local-first.
@@ -12,17 +13,15 @@ This fork turns Metrolist into a dedicated private karaoke application. Metrolis
 - Remote duet is recording-first, not live microphone streaming.
 - A duet can be recorded together or completed later.
 - Recordings remain on-device unless the user explicitly shares a duet take/export.
-- Modified Metrolist code remains subject to GPL-3.0 obligations.
+- Inherited GPL code remains under its original license and attribution.
 
 ## Target navigation
 
 1. **Home** — online search, local song, private duet, record-later duet.
-2. **Search** — Metrolist online discovery adapted so song selection enters karaoke preparation.
+2. **Search** — song-only online discovery; selection enters karaoke preparation.
 3. **Library** — local/offline songs and prepared karaoke cache.
 4. **Recordings** — solo takes, duet takes, exports and stems.
-5. **Settings** — existing Metrolist settings shell with karaoke-specific sections.
-
-The normal music-player experience is not a primary destination.
+5. **Settings** — KaraVox processing, microphone, recording, lyrics, appearance, playback and storage.
 
 ## Core preparation pipeline
 
@@ -31,8 +30,11 @@ KaraokeSongRef
       |
       v
 KaraokeAudioSourceResolver
-  online -> existing Metrolist resolver/cache
-  local  -> MediaStore/SAF adapter
+  online -> existing InnerTube/playback resolver adapter
+  local  -> SAF/content URI adapter
+      |
+      v
+Source cache/fingerprint
       |
       v
 VocalSeparator
@@ -51,68 +53,73 @@ KaraokeSession
       +---- fullscreen lyrics player
       +---- practice vocal mix
       +---- solo recorder
-      +---- duet recorder
+      +---- private duet recorder
 ```
 
-`KaraokePreparationCoordinator` intentionally depends on interfaces only. This keeps Metrolist-specific source resolution, ONNX/native separation, lyrics services and recording implementations replaceable and testable.
+`KaraokePreparationCoordinator` depends on interfaces instead of Android UI classes so source resolution, separation models, lyrics providers, recorders and alignment engines can be swapped and tested independently.
 
-## Stem separation plan
+## Vocal-separation strategy
+
+KaraVox must only bundle/download model weights with explicit redistribution rights.
 
 ### Fast
-- Mobile-optimized two-stem ONNX model.
-- Lowest memory and preparation time.
-- Suitable for lower-end devices.
+- Small two-stem MDX/ONNX karaoke model.
+- Lowest preparation time and memory use.
+- Intended for lower-end devices.
 
 ### Balanced
-- Higher-quality two-stem MDX-family/RoFormer-compatible ONNX model after Android benchmarking.
+- Higher-quality MDX-family ONNX model after Android benchmark validation.
 - Default profile.
 
 ### Best
-- Highest-quality model that passes memory/thermal tests on supported devices.
-- May use chunked inference and a longer preparation time.
+- Higher-quality RoFormer-class model only if memory, thermal behavior, download size and model licensing are acceptable on Android.
+- Chunked inference and longer preparation time are acceptable.
 
 Requirements:
-- Process once, cache stems by source fingerprint + model version.
-- Cancel safely when the user leaves preparation.
-- Never overwrite the original song.
-- Expose progress to UI.
-- Validate model licenses before bundling/distribution.
+- process once and cache stems by source fingerprint + model version
+- resumable/cancelable preparation
+- never overwrite original audio
+- progress reporting
+- model SHA-256 verification
+- explicit model license/attribution metadata
+- safe fallback when the device cannot run a selected model
 
 ## Lyrics engine
 
-Supported internal representation:
-
+Internal representation supports:
 - line start/end timestamps
 - optional word start/end timestamps
 - global user offset
 
 Provider priority:
-
-1. Better Lyrics word-synced result
+1. Better Lyrics word/synced result
 2. LRCLIB synced result
 3. local Enhanced LRC/LRC
 4. local TTML
 5. plain lyrics + manual sync editor
 
 UI behavior:
-- current words use the theme highlight color
-- future words remain white
+- current words use the KaraVox/theme highlight color
+- future words remain readable
 - previous/next lines are dimmed
 - independent lyric offset in milliseconds
-- manual tap-to-sync/editor is retained as fallback
+- manual tap-to-sync/editor fallback
+- optional transliteration/translation later
 
 ## Recording pipeline
 
-The microphone is always recorded independently from the instrumental.
+The microphone is always recorded independently from instrumental playback.
 
-Profiles:
+Target profiles:
 
 | Profile | Target |
 |---|---|
 | Standard | AAC, 48 kHz, space-efficient |
 | High | high-bitrate AAC, 48 kHz |
-| Studio FLAC | 48 kHz / 24-bit capture path where device support permits |
-| Studio WAV | 48 kHz / 24-bit capture path where device support permits |
+| Studio FLAC | lossless 48 kHz capture where device/backend supports it |
+| Studio WAV | lossless PCM WAV capture |
+
+The first Android recorder baseline currently implements reliable mono PCM16 WAV capture at the requested sample rate. True 24-bit device-capability handling, AAC and FLAC encoders remain separate backends and must not be advertised as implemented until verified.
 
 Post-processing is non-destructive:
 - noise reduction when supported/enabled
@@ -139,7 +146,7 @@ Exports:
 4. Both clients enter Ready state.
 5. Coordinated countdown emits a detectable sync marker.
 6. Each device plays the instrumental locally and records only its microphone.
-7. At completion, the vocal take and sync metadata are exchanged with explicit user consent.
+7. At completion, the vocal take and sync metadata are exchanged with explicit user action.
 8. Alignment engine calculates the partner offset.
 9. User can apply a final manual millisecond trim.
 10. Mixer renders preview/export.
@@ -156,12 +163,12 @@ The network never needs to keep two live microphone streams phase-aligned.
 
 ### Record later
 
-The first singer creates a duet package containing the session manifest and their vocal take. The second singer can complete the other part later; the same post-recording alignment pipeline is then used.
+The first singer creates a duet package containing the session manifest and their vocal take. The second singer can complete the other part later; the same post-record alignment pipeline is then used.
 
-## Karaoke settings
+## Settings
 
 ### Karaoke
-- separation quality
+- separation quality/model
 - default practice-vocal mix
 - countdown
 - lyrics style/offset
@@ -183,48 +190,51 @@ The first singer creates a duet package containing the session manifest and thei
 - auto-mix duet
 
 ### Duets
-- recording-together defaults
 - automatic alignment
 - manual offset
 - record-later package retention
 
 ### Playback / Appearance / Storage
-Reuse Metrolist infrastructure where it matches the karaoke product, including equalizer, normalization, cache, themes and storage management.
+Reuse existing open-source audio/theme/cache foundations where they fit KaraVox, while removing player/social settings that do not belong in the karaoke product.
 
 ## Implementation phases
 
-### Phase 1 — karaoke shell and contracts
+### Phase 1 — KaraVox shell and contracts
 - karaoke domain models/contracts
 - preparation coordinator
-- karaoke-first Home
-- Recordings destination
+- karaoke-first Home/Search/Recordings
 - recording-first private duet room
 - word-aware fullscreen lyric component
 - karaoke-first bottom navigation
+- KaraVox identity/version/README/NOTICE
 
-### Phase 2 — real song adapters
-- wrap existing Metrolist online resolver/cache as `KaraokeAudioSourceResolver`
-- local MediaStore/SAF resolver
-- redirect online/local song selection to Prepare Karaoke instead of normal player
-- preparation progress screen and persistent prepared-song cache
+### Phase 2 — real song and lyric adapters
+- online resolver adapter
+- local SAF resolver
+- local metadata reader
+- redirect online/local selection to Prepare Karaoke
+- Better Lyrics + LRCLIB adapters
+- LRC/Enhanced-LRC parser
+- preparation state UI
 
 ### Phase 3 — vocal separation
-- benchmark candidate ONNX models on Android
-- implement chunked inference, progress, cancellation and model versioning
-- Fast/Balanced/Best selection
-- validate output and cache reuse
+- choose explicitly redistributable ONNX weights
+- model manager with download/import, SHA-256 and license metadata
+- implement STFT/chunking/inference/iSTFT/overlap-add
+- Fast/Balanced/Best profiles
+- persistent prepared-stem cache
+- Android memory/thermal benchmark gates
 
-### Phase 4 — lyrics
-- Better Lyrics adapter
-- LRCLIB adapter
-- local LRC/Enhanced LRC/TTML parser
-- word timing renderer integration
+### Phase 4 — lyrics completion
+- local LRC/Enhanced LRC/TTML import
+- verify true word timing from Better Lyrics path
 - manual offset + tap-sync editor
+- lyrics cache/versioning
 
 ### Phase 5 — recording and mixer
-- AudioRecord/AAudio-compatible capture implementation
-- quality profiles
-- independent vocal files
+- AudioRecord baseline (started)
+- AAC/FLAC backends
+- device-capability-aware lossless capture
 - countdown/sync marker
 - effects chain and non-destructive mixer
 - local recording database and export
@@ -238,29 +248,29 @@ Reuse Metrolist infrastructure where it matches the karaoke product, including e
 - manual millisecond trim
 - Record Later duet package
 
-### Phase 7 — hardening and release
-- replace/remove remaining normal-player UI paths
-- karaoke-specific Settings UI
-- storage cleanup and cache quotas
+### Phase 7 — product cleanup and release
+- replace/remove remaining normal-player/social UI paths
+- KaraVox-specific Settings
+- storage cleanup/cache quotas
 - offline tests
-- device latency tests (speaker/wired/Bluetooth)
+- speaker/wired/Bluetooth latency tests
 - long-session/thermal/memory tests
 - crash recovery during preparation/recording
 - accessibility/localization
-- license attribution and GPL source/release workflow
+- complete attribution and GPL source/release workflow
 
 ## Acceptance tests
 
 A release candidate is not complete until all of these work:
 
-- Online song -> Prepare Karaoke -> instrumental -> synced lyrics -> private recording.
+- Online song -> Prepare Karaoke -> real instrumental -> synced lyrics -> private recording.
 - Local MP3/FLAC/WAV/M4A -> same flow without internet after required assets are cached.
 - Reopening a prepared song reuses cached stems.
 - Missing word lyrics gracefully falls back to line timing.
-- Missing synced lyrics can be manually offset/synced.
+- Missing synced lyrics can be imported or manually synchronized.
 - Mic recording is independent from instrumental and can be remixed.
 - Killing/reopening the app does not corrupt existing recordings.
 - Together duet remains alignable under deliberately injected network delay.
 - Manual +/- millisecond adjustment is audible in preview and preserved in export.
-- Record Later duet can be completed on a separate session/device.
-- No recording is uploaded without explicit user action.
+- Record Later duet can be completed in another session/device.
+- No recording is uploaded automatically.
