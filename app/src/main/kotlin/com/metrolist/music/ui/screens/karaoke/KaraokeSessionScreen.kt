@@ -85,10 +85,11 @@ fun KaraokeSessionScreen(
     var recordingStartNs by remember(activeSession.id) { mutableLongStateOf(0L) }
     var playbackStartOffsetMs by remember(activeSession.id) { mutableLongStateOf(0L) }
     var recordingStarting by remember(activeSession.id) { mutableStateOf(false) }
+    var recordingStopping by remember(activeSession.id) { mutableStateOf(false) }
     var recordingStatus by remember(activeSession.id) { mutableStateOf<String?>(null) }
 
     fun beginRecording() {
-        if (activeRecordingId != null || recordingStarting) return
+        if (activeRecordingId != null || recordingStarting || recordingStopping) return
         recordingStarting = true
         recordingStatus = "Starting private recording…"
         coroutineScope.launch {
@@ -114,7 +115,8 @@ fun KaraokeSessionScreen(
 
     fun stopRecording() {
         val recordingId = activeRecordingId ?: return
-        activeRecordingId = null
+        if (recordingStopping) return
+        recordingStopping = true
         recordingStatus = "Saving private recording…"
         player.pause()
         coroutineScope.launch {
@@ -132,6 +134,8 @@ fun KaraokeSessionScreen(
             }.onFailure { error ->
                 recordingStatus = error.message ?: "Unable to save recording"
             }
+            activeRecordingId = null
+            recordingStopping = false
         }
     }
 
@@ -153,7 +157,8 @@ fun KaraokeSessionScreen(
     }
 
     // Each active recording owns its cleanup effect. Leaving the screen never intentionally keeps
-    // microphone capture running in the background.
+    // microphone capture running in the background. During a normal stop, recorder.stop removes
+    // the active handle before this cleanup observes the state transition, so cancel becomes a no-op.
     DisposableEffect(activeRecordingId) {
         val recordingToCancel = activeRecordingId
         onDispose {
@@ -188,12 +193,12 @@ fun KaraokeSessionScreen(
         onRecord = {
             if (activeRecordingId != null) {
                 stopRecording()
-            } else if (
+            } else if (!recordingStarting && !recordingStopping &&
                 ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) ==
                     PackageManager.PERMISSION_GRANTED
             ) {
                 beginRecording()
-            } else {
+            } else if (!recordingStarting && !recordingStopping) {
                 micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
         },
@@ -208,7 +213,7 @@ fun KaraokeSessionScreen(
                 session = updatedSession
             }
         },
-        isRecording = activeRecordingId != null || recordingStarting,
+        isRecording = activeRecordingId != null || recordingStarting || recordingStopping,
         recordingStatus = recordingStatus,
     )
 }
