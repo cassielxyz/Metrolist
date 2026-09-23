@@ -6,6 +6,7 @@
 package com.metrolist.music.ui.screens
 
 import android.app.Activity
+import android.net.Uri
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,6 +26,7 @@ import androidx.navigation.compose.dialog
 import androidx.navigation.navArgument
 import com.metrolist.music.constants.DarkModeKey
 import com.metrolist.music.constants.PureBlackKey
+import com.metrolist.music.karaoke.model.KaraokeSource
 import com.metrolist.music.ui.screens.artist.ArtistAlbumsScreen
 import com.metrolist.music.ui.screens.artist.ArtistItemsScreen
 import com.metrolist.music.ui.screens.artist.ArtistScreen
@@ -80,7 +82,9 @@ fun NavGraphBuilder.navigationBuilder(
     composable(Screens.Home.route) {
         KaraokeHomeScreen(
             onSearchOnline = { navController.navigate(Screens.Search.route) },
-            onChooseOffline = { navController.navigate(Screens.Library.route) },
+            onOfflineSongSelected = { mediaUri ->
+                navController.navigate("karaoke_prepare_local?uri=${Uri.encode(mediaUri)}")
+            },
             onOpenDuetRoom = { navController.navigate(Screens.ListenTogether.route) },
             onRecordLaterDuet = { navController.navigate(Screens.ListenTogether.route) },
             onOpenRecordings = { navController.navigate(Screens.Recordings.route) },
@@ -207,7 +211,25 @@ fun NavGraphBuilder.navigationBuilder(
         ),
     ) { backStackEntry ->
         KaraokePrepareScreen(
-            videoId = backStackEntry.arguments?.getString("videoId").orEmpty(),
+            songId = backStackEntry.arguments?.getString("videoId").orEmpty(),
+            source = KaraokeSource.ONLINE,
+            onBack = { navController.popBackStack() },
+        )
+    }
+
+    composable(
+        route = "karaoke_prepare_local?uri={uri}",
+        arguments = listOf(
+            navArgument("uri") {
+                type = NavType.StringType
+            },
+        ),
+    ) { backStackEntry ->
+        val mediaUri = backStackEntry.arguments?.getString("uri").orEmpty()
+        KaraokePrepareScreen(
+            songId = "local-${mediaUri.hashCode()}",
+            source = KaraokeSource.LOCAL,
+            mediaUri = mediaUri,
             onBack = { navController.popBackStack() },
         )
     }
