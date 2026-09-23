@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import kotlin.io.path.createTempDirectory
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.sin
@@ -13,7 +14,7 @@ import kotlin.math.sin
 class StreamingMdxDemixerTest {
     @Test
     fun identityModelStreamsVocalPredictionWithoutGrowingWithSongLength() {
-        val root = createTempDir(prefix = "karavox-streaming-mdx-")
+        val root = createTempDirectory("karavox-streaming-mdx-").toFile()
         try {
             val sourceFile = File(root, "source.wav")
             val length = 2_137
@@ -55,7 +56,7 @@ class StreamingMdxDemixerTest {
 
     @Test
     fun sampleSourceResamplesOnlyRequestedWindow() {
-        val root = createTempDir(prefix = "karavox-sample-source-")
+        val root = createTempDirectory("karavox-sample-source-").toFile()
         try {
             val sourceFile = File(root, "source.wav")
             val values = FloatArray(1_000) { it / 1_000f }
