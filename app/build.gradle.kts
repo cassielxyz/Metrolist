@@ -383,6 +383,10 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.media3.okhttp)
 
+    // Local, on-device KaraVox stem separation.
+    implementation(libs.onnxruntime.android)
+    implementation(libs.jtransforms)
+
     "gmsImplementation"(libs.media3.cast)
     "gmsImplementation"(libs.mediarouter)
     "gmsImplementation"(libs.cast.framework)
