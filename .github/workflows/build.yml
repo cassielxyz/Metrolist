@@ -1,104 +1,26 @@
-name: Build APKs
+name: KaraVox Manual APK Build
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["**"]
-    paths-ignore:
-      - "README.md"
-      - "fastlane/**"
-      - "assets/**"
-      - ".github/**/*.md"
-      - ".github/FUNDING.yml"
-      - ".github/ISSUE_TEMPLATE/**"
 
 permissions:
-  contents: write
-  discussions: write
+  contents: read
 
 jobs:
-  build_release:
-    name: Build Release (${{ matrix.variant }})
-    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        include:
-          - variant: foss
-            variantName: Foss
-          - variant: gms
-            variantName: Gms
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
-        with:
-          java-version: "21"
-          distribution: "temurin"
-
-      - name: Set Up Gradle
-        uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-encryption-key: ${{ secrets.GRADLE_CACHE_KEY }}
-          cache-cleanup: on-success
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build Release APK and Run Lint
-        run: ./gradlew --console=plain assemble${{ matrix.variantName }}Release :app:lint${{ matrix.variantName }}Release --warning-mode summary
-        env:
-          METROLIST_APPLICATION_ID: com.metrolist.music
-          METROLIST_APP_NAME: Metrolist Nightly
-          PULL_REQUEST: "false"
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
-          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
-
-      - name: Sign APK
-        uses: ilharp/sign-android-release@v2.0.0
-        with:
-          releaseDir: app/build/outputs/apk/${{ matrix.variant }}/release/
-          signingKey: ${{ secrets.KEYSTORE }}
-          keyAlias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-          buildToolsVersion: 35.0.0
-
-      - name: Move signed APK
-        run: |
-          OUTPUT_DIR="app/build/outputs/apk/${{ matrix.variant }}/release"
-          mkdir -p "$OUTPUT_DIR/out"
-          if [ "${{ matrix.variant }}" = "gms" ]; then
-            TARGET_NAME="app-universal-with-Google-Cast.apk"
-          else
-            TARGET_NAME="app-universal-release.apk"
-          fi
-          find "$OUTPUT_DIR" -name "*-signed.apk" -o -name "*-unsigned-signed.apk" | xargs -I{} mv {} "$OUTPUT_DIR/out/$TARGET_NAME"
-
-      - name: Upload Signed APK
-        uses: actions/upload-artifact@v6
-        with:
-          name: ${{ matrix.variant == 'gms' && 'app-with-Google-Cast' || 'app-release' }}
-          path: app/build/outputs/apk/${{ matrix.variant }}/release/out/*
-
   build_debug:
     name: Build Debug (${{ matrix.variant }})
-    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         include:
           - variant: foss
             variantName: Foss
           - variant: gms
             variantName: Gms
+          - variant: izzy
+            variantName: Izzy
 
     steps:
       - uses: actions/checkout@v6
@@ -111,31 +33,43 @@ jobs:
           java-version: "21"
           distribution: "temurin"
 
-      - name: Set Up Gradle
+      - name: Set up Gradle and validate wrapper
         uses: gradle/actions/setup-gradle@v5
         with:
-          cache-encryption-key: ${{ secrets.GRADLE_CACHE_KEY }}
           cache-cleanup: on-success
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Restore Persistent Keystore
+      - name: Generate isolated KaraVox debug keystore
         run: |
-          echo "${{ secrets.DEBUG_KEYSTORE }}" | base64 -d > ./app/persistent-debug.keystore
+          keytool -genkeypair -v \
+            -keystore app/ci-debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=KaraVox Manual Build,O=KaraVox,C=IN"
 
-      - name: Build Debug APK and Run Lint
-        run: ./gradlew --console=plain assemble${{ matrix.variantName }}Debug :app:lint${{ matrix.variantName }}Debug --warning-mode summary
+      - name: Build debug APK and lint
+        run: |
+          ./gradlew --console=plain --stacktrace --warning-mode summary \
+            assemble${{ matrix.variantName }}Debug \
+            :app:lint${{ matrix.variantName }}Debug
         env:
-          METROLIST_APPLICATION_ID: com.metrolist.music
-          METROLIST_APP_NAME: Metrolist Nightly
-          PULL_REQUEST: "false"
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
-          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
+          KARAVOX_APPLICATION_ID: com.cassiel.karavox.manual
+          KARAVOX_APP_NAME: KaraVox Manual
+          KARAVOX_DEBUG_KEYSTORE_PATH: ci-debug.keystore
+          KARAVOX_DEBUG_KEYSTORE_PASSWORD: android
+          KARAVOX_DEBUG_KEY_ALIAS: androiddebugkey
+          KARAVOX_DEBUG_KEY_PASSWORD: android
 
-      - name: Upload Debug APK
+      - name: Upload debug APK
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ matrix.variant == 'gms' && 'app-debug-gms' || 'app-debug' }}
+          name: karavox-${{ matrix.variant }}-debug-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 7
           path: app/build/outputs/apk/${{ matrix.variant }}/debug/*.apk
