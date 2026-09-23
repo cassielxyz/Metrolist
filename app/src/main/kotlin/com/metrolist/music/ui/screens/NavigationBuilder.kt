@@ -33,6 +33,8 @@ import com.metrolist.music.ui.screens.equalizer.EqScreen
 import com.metrolist.music.ui.screens.equalizer.wizard.WizardScreen
 import com.metrolist.music.ui.screens.karaoke.DuetRecordingRoomScreen
 import com.metrolist.music.ui.screens.karaoke.KaraokeHomeScreen
+import com.metrolist.music.ui.screens.karaoke.KaraokeOnlineSearchResult
+import com.metrolist.music.ui.screens.karaoke.KaraokePrepareScreen
 import com.metrolist.music.ui.screens.karaoke.KaraokeRecordingsScreen
 import com.metrolist.music.ui.screens.library.LibraryScreen
 import com.metrolist.music.ui.screens.playlist.AutoPlaylistScreen
@@ -43,7 +45,6 @@ import com.metrolist.music.ui.screens.playlist.TopPlaylistScreen
 import com.metrolist.music.ui.screens.podcast.OnlinePodcastScreen
 import com.metrolist.music.ui.screens.recognition.RecognitionHistoryScreen
 import com.metrolist.music.ui.screens.recognition.RecognitionScreen
-import com.metrolist.music.ui.screens.search.OnlineSearchResult
 import com.metrolist.music.ui.screens.search.SearchScreen
 import com.metrolist.music.ui.screens.settings.AboutScreen
 import com.metrolist.music.ui.screens.settings.AiSettings
@@ -193,11 +194,22 @@ fun NavGraphBuilder.navigationBuilder(
         popExitTransition = {
             fadeOut(tween(200))
         },
-    ) { backStackEntry ->
-        OnlineSearchResult(
-            savedStateHandle = backStackEntry.savedStateHandle
-        )
+    ) {
+        KaraokeOnlineSearchResult()
+    }
 
+    composable(
+        route = "karaoke_prepare/{videoId}",
+        arguments = listOf(
+            navArgument("videoId") {
+                type = NavType.StringType
+            },
+        ),
+    ) { backStackEntry ->
+        KaraokePrepareScreen(
+            videoId = backStackEntry.arguments?.getString("videoId").orEmpty(),
+            onBack = { navController.popBackStack() },
+        )
     }
 
     composable(
