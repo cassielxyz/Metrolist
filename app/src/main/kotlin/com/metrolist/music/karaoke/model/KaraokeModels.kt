@@ -1,6 +1,6 @@
 /**
- * Metrolist Project (C) 2026
- * Licensed under GPL-3.0 | See git history for contributors
+ * KaraVox Project (C) 2026
+ * Licensed under GPL-3.0.
  */
 
 package com.metrolist.music.karaoke.model
@@ -39,7 +39,8 @@ enum class RecordingQuality(
     STANDARD(48_000, null, RecordingCodec.AAC),
     HIGH(48_000, null, RecordingCodec.AAC),
     STUDIO_FLAC(48_000, 24, RecordingCodec.FLAC),
-    STUDIO_WAV(48_000, 24, RecordingCodec.WAV),
+    /** Current Android WAV backend is verified at 48 kHz / 16-bit PCM. */
+    STUDIO_WAV(48_000, 16, RecordingCodec.WAV),
 }
 
 enum class LyricsSource {
@@ -104,12 +105,21 @@ data class KaraokeSession(
     val tempo: Float = 1f,
 )
 
+/**
+ * Timing data saved with a duet take.
+ *
+ * A monotonic timestamp is useful only on the device that produced it; it is never directly
+ * compared with another phone's monotonic clock. Remote alignment instead uses a room-schedule
+ * error, an acoustic/digital sync marker when available, calibrated device latency and the final
+ * manual trim.
+ */
 data class DuetSyncMetadata(
-    /** Monotonic timestamp recorded when the shared start marker was emitted. */
-    val startTimestampNs: Long,
-    /** Detected sync-marker position inside the local recording. */
+    val localStartTimestampNs: Long,
+    /** Local start error relative to the room's synchronized scheduled start. + means late. */
+    val roomStartErrorMs: Long? = null,
+    /** Detected sync-marker position inside this local recording. */
     val syncMarkerPositionMs: Long? = null,
-    /** Device/output latency measured or manually calibrated for this take. */
+    /** Measured output/input path latency for this device/profile. */
     val deviceLatencyMs: Long = 0L,
     /** Final user trim applied after automatic alignment. */
     val manualOffsetMs: Long = 0L,
@@ -125,17 +135,17 @@ data class RecordingTake(
 )
 
 data class AlignmentResult(
-    /** Shift applied to the partner take relative to the host take. */
+    /** Shift applied to the partner take relative to the host take. Negative = earlier. */
     val partnerOffsetMs: Long,
     val confidence: Float,
     val method: String,
 )
 
 sealed interface KaraokePreparationState {
-    object Idle : KaraokePreparationState
-    object ResolvingSource : KaraokePreparationState
+    data object Idle : KaraokePreparationState
+    data object ResolvingSource : KaraokePreparationState
     data class Separating(val progress: Float) : KaraokePreparationState
-    object LoadingLyrics : KaraokePreparationState
+    data object LoadingLyrics : KaraokePreparationState
     data class Ready(val session: KaraokeSession) : KaraokePreparationState
     data class Failed(val message: String) : KaraokePreparationState
 }
