@@ -19,13 +19,31 @@ if (localPropertiesFile.exists()) {
     localProperties.load(localPropertiesFile.inputStream())
 }
 
-val baseApplicationId = "com.metrolist.music"
-val applicationIdOverride = System.getenv("METROLIST_APPLICATION_ID")?.takeIf { it.isNotBlank() }
-val appNameOverride = System.getenv("METROLIST_APP_NAME")?.takeIf { it.isNotBlank() }
-val debugKeystorePathOverride = System.getenv("METROLIST_DEBUG_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
-val debugKeystorePassword = System.getenv("METROLIST_DEBUG_KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
-val debugKeyAlias = System.getenv("METROLIST_DEBUG_KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "androiddebugkey"
-val debugKeyPassword = System.getenv("METROLIST_DEBUG_KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+val baseApplicationId = "com.cassiel.karavox"
+val applicationIdOverride = (
+    System.getenv("KARAVOX_APPLICATION_ID")
+        ?: System.getenv("METROLIST_APPLICATION_ID")
+)?.takeIf { it.isNotBlank() }
+val appNameOverride = (
+    System.getenv("KARAVOX_APP_NAME")
+        ?: System.getenv("METROLIST_APP_NAME")
+)?.takeIf { it.isNotBlank() }
+val debugKeystorePathOverride = (
+    System.getenv("KARAVOX_DEBUG_KEYSTORE_PATH")
+        ?: System.getenv("METROLIST_DEBUG_KEYSTORE_PATH")
+)?.takeIf { it.isNotBlank() }
+val debugKeystorePassword = (
+    System.getenv("KARAVOX_DEBUG_KEYSTORE_PASSWORD")
+        ?: System.getenv("METROLIST_DEBUG_KEYSTORE_PASSWORD")
+)?.takeIf { it.isNotBlank() } ?: "android"
+val debugKeyAlias = (
+    System.getenv("KARAVOX_DEBUG_KEY_ALIAS")
+        ?: System.getenv("METROLIST_DEBUG_KEY_ALIAS")
+)?.takeIf { it.isNotBlank() } ?: "androiddebugkey"
+val debugKeyPassword = (
+    System.getenv("KARAVOX_DEBUG_KEY_PASSWORD")
+        ?: System.getenv("METROLIST_DEBUG_KEY_PASSWORD")
+)?.takeIf { it.isNotBlank() } ?: "android"
 val persistentDebugKeystoreFile = file("persistent-debug.keystore")
 val workflowDebugKeystoreFile = debugKeystorePathOverride?.let(::file)
 
@@ -94,6 +112,8 @@ abstract class GenerateProtoTask : DefaultTask() {
 }
 
 android {
+    // Internal package migration from the upstream namespace will be done gradually.
+    // The installable application identity is already KaraVox-specific.
     namespace = "com.metrolist.music"
     compileSdk = 37
 
@@ -101,9 +121,9 @@ android {
         applicationId = applicationIdOverride ?: baseApplicationId
         minSdk = 26
         targetSdk = 36
-        versionCode = 149
-        versionName = "13.6.0"
-        resValue("string", "app_name", appNameOverride ?: "Metrolist")
+        versionCode = 1
+        versionName = "0.1.0-alpha"
+        resValue("string", "app_name", appNameOverride ?: "KaraVox")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -112,34 +132,31 @@ android {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
 
-        // LastFM API keys from GitHub Secrets
         val lastFmKey = localProperties.getProperty("LASTFM_API_KEY") ?: System.getenv("LASTFM_API_KEY") ?: ""
         val lastFmSecret = localProperties.getProperty("LASTFM_SECRET") ?: System.getenv("LASTFM_SECRET") ?: ""
 
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastFmKey\"")
         buildConfigField("String", "LASTFM_SECRET", "\"$lastFmSecret\"")
         buildConfigField("String", "ARCHITECTURE", "\"universal\"")
-        buildConfigField("Long", "DISCORD_APP_ID", "1447278780795064401L")
+        buildConfigField("Long", "DISCORD_APP_ID", "0L")
     }
 
     flavorDimensions += listOf("variant")
     productFlavors {
-        // FOSS - Updater, but no gcast
         create("foss") {
             dimension = "variant"
             isDefault = true
             buildConfigField("Boolean", "CAST_AVAILABLE", "false")
-            buildConfigField("Boolean", "UPDATER_AVAILABLE", "true")
+            // Keep updater off until KaraVox has its own release endpoint.
+            buildConfigField("Boolean", "UPDATER_AVAILABLE", "false")
         }
 
-        // GMS - Updater and gcast
         create("gms") {
             dimension = "variant"
             buildConfigField("Boolean", "CAST_AVAILABLE", "true")
-            buildConfigField("Boolean", "UPDATER_AVAILABLE", "true")
+            buildConfigField("Boolean", "UPDATER_AVAILABLE", "false")
         }
 
-        // IzzyOnDroid - no gcast, no updater - the ONLY F-droid compliant build
         create("izzy") {
             dimension = "variant"
             buildConfigField("Boolean", "CAST_AVAILABLE", "false")
@@ -191,7 +208,7 @@ android {
             }
             isDebuggable = true
             if (appNameOverride == null) {
-                resValue("string", "app_name", "Metrolist Debug")
+                resValue("string", "app_name", "KaraVox Debug")
             }
             signingConfig =
                 if (workflowDebugKeystoreFile != null) {
@@ -323,12 +340,6 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     }
 }
 
-// Android provides org.json as a platform API (/apex/com.android.art/javalib/core-libart.jar).
-// The standalone org.json:json artefact bundles an older Apache Harmony copy of JSONArray that
-// contains an internal `myArrayList` field absent from the platform class.  Without obfuscation
-// R8 inlines against this internal field; at runtime the platform class is resolved instead,
-// producing a NoSuchFieldError.  Excluding the artefact globally ensures only the platform
-// class is ever referenced.
 configurations.configureEach {
     exclude(group = "org.json", module = "json")
 }
@@ -372,7 +383,6 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.media3.okhttp)
 
-    // Google Cast - only included in GMS flavor (not available in F-Droid/FOSS builds)
     "gmsImplementation"(libs.media3.cast)
     "gmsImplementation"(libs.mediarouter)
     "gmsImplementation"(libs.cast.framework)
@@ -403,7 +413,6 @@ dependencies {
     implementation(libs.ktor.client.encoding)
     implementation(libs.ktor.serialization.json)
 
-    // Protobuf for message serialization (lite version for Android)
     implementation(libs.protobuf.javalite)
     implementation(libs.protobuf.kotlin.lite)
 
