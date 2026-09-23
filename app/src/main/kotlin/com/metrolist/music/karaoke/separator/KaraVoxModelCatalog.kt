@@ -19,6 +19,7 @@ data class MdxDspSpec(
     val dimT: Int,
     val compensation: Float,
     val predictedStem: PredictedStem,
+    val overlap: Float = 0.25f,
 )
 
 data class SeparatorModelSpec(
