@@ -1,6 +1,6 @@
 /**
- * Metrolist Project (C) 2026
- * Licensed under GPL-3.0 | See git history for contributors
+ * KaraVox Project (C) 2026
+ * Licensed under GPL-3.0.
  */
 
 package com.metrolist.music.ui.screens.settings
@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -176,7 +175,9 @@ private fun SettingsSwitch(
     ) {
         Text(
             text = label,
-            modifier = Modifier.weight(1f).padding(end = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth(0.82f)
+                .padding(end = 12.dp),
             style = MaterialTheme.typography.bodyLarge,
         )
         Switch(
