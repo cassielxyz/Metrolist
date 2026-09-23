@@ -33,7 +33,7 @@ class MetrolistOnlineKaraokeSourceResolver(
         }
 
         val playbackData = YTPlayerUtils.playerResponseForPlayback(
-            videoId = song.id,
+            song.id,
             audioQuality = audioQuality,
             connectivityManager = connectivityManager,
         ).getOrThrow()
