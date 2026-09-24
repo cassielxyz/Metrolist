@@ -42,6 +42,8 @@ import com.metrolist.music.karaoke.duet.WaveformDuetAlignmentEngine
 import com.metrolist.music.karaoke.model.DuetSyncMetadata
 import com.metrolist.music.karaoke.recording.KaraokeRecordingRepository
 import com.metrolist.music.karaoke.recording.SavedKaraokeRecording
+import com.metrolist.music.karaoke.settings.KaraokeDuetManualOffsetMsKey
+import com.metrolist.music.utils.rememberPreference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,6 +62,7 @@ fun KaraokeRecordingsScreen() {
     val alignmentEngine = remember { WaveformDuetAlignmentEngine() }
     val coroutineScope = rememberCoroutineScope()
     val player = remember { ExoPlayer.Builder(appContext).build() }
+    var duetManualOffsetMs by rememberPreference(KaraokeDuetManualOffsetMsKey, 0L)
 
     var recordings by remember { mutableStateOf<List<SavedKaraokeRecording>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -195,22 +198,30 @@ fun KaraokeRecordingsScreen() {
                 val hostSync = host.take.syncMetadata ?: DuetSyncMetadata(0L)
                 val partnerSync = partner.take.syncMetadata ?: DuetSyncMetadata(0L)
                 val alignment = alignmentEngine.align(host.take, partner.take, hostSync, partnerSync)
+                val finalPartnerOffsetMs = (alignment.partnerOffsetMs + duetManualOffsetMs)
+                    .coerceIn(-10_000L, 10_000L)
                 val output = File(appContext.cacheDir, "karaoke/export/${host.take.id}-${partner.take.id}.duet.wav")
                 withContext(Dispatchers.Default) {
                     StreamingKaraokeMixer.mix(
                         instrumentalFile = instrumental,
                         vocalTracks = listOf(
                             KaraokeFileMixTrack(hostFile, gain = 0.92f),
-                            KaraokeFileMixTrack(partnerFile, gain = 0.92f, offsetMs = alignment.partnerOffsetMs),
+                            KaraokeFileMixTrack(partnerFile, gain = 0.92f, offsetMs = finalPartnerOffsetMs),
                         ),
                         outputFile = output,
                     )
                 }
-                output to alignment
-            }.onSuccess { (output, alignment) ->
+                Triple(output, alignment, finalPartnerOffsetMs)
+            }.onSuccess { (output, alignment, finalPartnerOffsetMs) ->
                 selectedDuetTake = null
                 pendingMixExport = output
-                statusMessage = "Aligned with ${alignment.method}"
+                statusMessage = buildString {
+                    append("Aligned with ${alignment.method}: ${alignment.partnerOffsetMs} ms")
+                    if (duetManualOffsetMs != 0L) {
+                        append(" • manual ${if (duetManualOffsetMs > 0L) "+" else ""}${duetManualOffsetMs} ms")
+                    }
+                    append(" • final ${finalPartnerOffsetMs} ms")
+                }
                 exportMixLauncher.launch("${safeName(host.title)}-duet.wav")
             }.onFailure { error ->
                 statusMessage = null
@@ -247,6 +258,11 @@ fun KaraokeRecordingsScreen() {
             Text(
                 "Duet host selected: ${selected.title}. Choose Duet on a second take from the same song.",
                 color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                "Partner timing correction: ${if (duetManualOffsetMs >= 0L) "+" else ""}${duetManualOffsetMs} ms (change in Settings).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         statusMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
