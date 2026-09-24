@@ -37,6 +37,8 @@ import com.metrolist.music.karaoke.model.KaraokeSessionStore
 import com.metrolist.music.karaoke.model.RecordingQuality
 import com.metrolist.music.karaoke.recording.AndroidWavKaraokeRecorder
 import com.metrolist.music.karaoke.recording.KaraokeRecordingRepository
+import com.metrolist.music.karaoke.settings.KaraokeCountdownSecondsKey
+import com.metrolist.music.utils.rememberPreference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -54,6 +56,7 @@ fun KaraokeSessionScreen(
     val sessionRepository = remember(appContext) { KaraokeSessionRepository(appContext) }
     var session by remember(sessionId) { mutableStateOf(KaraokeSessionStore.get(sessionId)) }
     var loadingSession by remember(sessionId) { mutableStateOf(session == null) }
+    var countdownSeconds by rememberPreference(KaraokeCountdownSecondsKey, 3)
 
     LaunchedEffect(sessionId) {
         if (session == null) {
@@ -114,7 +117,6 @@ fun KaraokeSessionScreen(
     fun beginRecording() {
         if (activeRecordingId != null || recordingStarting || recordingStopping) return
         recordingStarting = true
-        recordingStatus = "Starting private recording…"
         coroutineScope.launch {
             runCatching {
                 player.pause()
@@ -122,6 +124,15 @@ fun KaraokeSessionScreen(
                 mixBeforeRecording = vocalMix
                 vocalMix = 0f
                 player.setVocalMix(0f)
+
+                val safeCountdown = countdownSeconds.coerceIn(0, 5)
+                if (safeCountdown > 0) {
+                    for (remaining in safeCountdown downTo 1) {
+                        recordingStatus = "Recording starts in $remaining…"
+                        delay(1_000L)
+                    }
+                }
+                recordingStatus = "Starting private recording…"
 
                 val captureStart = System.nanoTime()
                 val recordingId = recorder.start(activeSession, RecordingQuality.STUDIO_WAV)
