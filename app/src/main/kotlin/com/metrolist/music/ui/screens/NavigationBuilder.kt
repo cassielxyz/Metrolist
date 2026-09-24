@@ -1,11 +1,12 @@
 /**
- * Metrolist Project (C) 2026
+ * KaraVox Project (C) 2026
  * Licensed under GPL-3.0 | See git history for contributors
  */
 
 package com.metrolist.music.ui.screens
 
 import android.app.Activity
+import android.net.Uri
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,12 +26,19 @@ import androidx.navigation.compose.dialog
 import androidx.navigation.navArgument
 import com.metrolist.music.constants.DarkModeKey
 import com.metrolist.music.constants.PureBlackKey
+import com.metrolist.music.karaoke.model.KaraokeSource
 import com.metrolist.music.ui.screens.artist.ArtistAlbumsScreen
 import com.metrolist.music.ui.screens.artist.ArtistItemsScreen
 import com.metrolist.music.ui.screens.artist.ArtistScreen
 import com.metrolist.music.ui.screens.artist.ArtistSongsScreen
 import com.metrolist.music.ui.screens.equalizer.EqScreen
 import com.metrolist.music.ui.screens.equalizer.wizard.WizardScreen
+import com.metrolist.music.ui.screens.karaoke.DuetRecordingRoomScreen
+import com.metrolist.music.ui.screens.karaoke.KaraokeHomeScreen
+import com.metrolist.music.ui.screens.karaoke.KaraokeOnlineSearchResult
+import com.metrolist.music.ui.screens.karaoke.KaraokePrepareScreen
+import com.metrolist.music.ui.screens.karaoke.KaraokeRecordingsScreen
+import com.metrolist.music.ui.screens.karaoke.KaraokeSessionScreen
 import com.metrolist.music.ui.screens.library.LibraryScreen
 import com.metrolist.music.ui.screens.playlist.AutoPlaylistScreen
 import com.metrolist.music.ui.screens.playlist.CachePlaylistScreen
@@ -40,7 +48,6 @@ import com.metrolist.music.ui.screens.playlist.TopPlaylistScreen
 import com.metrolist.music.ui.screens.podcast.OnlinePodcastScreen
 import com.metrolist.music.ui.screens.recognition.RecognitionHistoryScreen
 import com.metrolist.music.ui.screens.recognition.RecognitionScreen
-import com.metrolist.music.ui.screens.search.OnlineSearchResult
 import com.metrolist.music.ui.screens.search.SearchScreen
 import com.metrolist.music.ui.screens.settings.AboutScreen
 import com.metrolist.music.ui.screens.settings.AiSettings
@@ -61,7 +68,6 @@ import com.metrolist.music.ui.screens.settings.integrations.DiscordSettings
 import com.metrolist.music.ui.screens.settings.integrations.IntegrationScreen
 import com.metrolist.music.ui.screens.settings.integrations.LastFMSettings
 import com.metrolist.music.ui.screens.settings.integrations.ListenTogetherSettings
-
 import com.metrolist.music.ui.screens.wrapped.WrappedScreen
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
@@ -75,7 +81,15 @@ fun NavGraphBuilder.navigationBuilder(
     snackbarHostState: SnackbarHostState,
 ) {
     composable(Screens.Home.route) {
-        HomeScreen(snackbarHostState = snackbarHostState)
+        KaraokeHomeScreen(
+            onSearchOnline = { navController.navigate(Screens.Search.route) },
+            onOfflineSongSelected = { mediaUri ->
+                navController.navigate("karaoke_prepare_local?uri=${Uri.encode(mediaUri)}")
+            },
+            onOpenDuetRoom = { navController.navigate(Screens.ListenTogether.route) },
+            onRecordLaterDuet = { navController.navigate(Screens.ListenTogether.route) },
+            onOpenRecordings = { navController.navigate(Screens.Recordings.route) },
+        )
     }
 
     composable(Screens.Search.route) { backStackEntry ->
@@ -100,14 +114,22 @@ fun NavGraphBuilder.navigationBuilder(
         LibraryScreen()
     }
 
+    composable(Screens.Recordings.route) {
+        KaraokeRecordingsScreen()
+    }
+
     composable(Screens.ListenTogether.route) {
-        ListenTogetherScreen(navController, showTopBar = false)
+        DuetRecordingRoomScreen(
+            onBack = { navController.popBackStack() },
+        )
     }
 
     composable(
         route = "listen_together_from_topbar",
     ) {
-        ListenTogetherScreen(navController, showTopBar = true)
+        DuetRecordingRoomScreen(
+            onBack = { navController.popBackStack() },
+        )
     }
 
     composable("history") {
@@ -177,11 +199,60 @@ fun NavGraphBuilder.navigationBuilder(
         popExitTransition = {
             fadeOut(tween(200))
         },
-    ) { backStackEntry ->
-        OnlineSearchResult(
-            savedStateHandle = backStackEntry.savedStateHandle
-        )
+    ) {
+        KaraokeOnlineSearchResult()
+    }
 
+    composable(
+        route = "karaoke_prepare/{videoId}",
+        arguments = listOf(
+            navArgument("videoId") {
+                type = NavType.StringType
+            },
+        ),
+    ) { backStackEntry ->
+        KaraokePrepareScreen(
+            songId = backStackEntry.arguments?.getString("videoId").orEmpty(),
+            source = KaraokeSource.ONLINE,
+            onStartKaraoke = { sessionId ->
+                navController.navigate("karaoke_session/${Uri.encode(sessionId)}")
+            },
+            onBack = { navController.popBackStack() },
+        )
+    }
+
+    composable(
+        route = "karaoke_prepare_local?uri={uri}",
+        arguments = listOf(
+            navArgument("uri") {
+                type = NavType.StringType
+            },
+        ),
+    ) { backStackEntry ->
+        val mediaUri = backStackEntry.arguments?.getString("uri").orEmpty()
+        KaraokePrepareScreen(
+            songId = "local-${mediaUri.hashCode()}",
+            source = KaraokeSource.LOCAL,
+            mediaUri = mediaUri,
+            onStartKaraoke = { sessionId ->
+                navController.navigate("karaoke_session/${Uri.encode(sessionId)}")
+            },
+            onBack = { navController.popBackStack() },
+        )
+    }
+
+    composable(
+        route = "karaoke_session/{sessionId}",
+        arguments = listOf(
+            navArgument("sessionId") {
+                type = NavType.StringType
+            },
+        ),
+    ) { backStackEntry ->
+        KaraokeSessionScreen(
+            sessionId = backStackEntry.arguments?.getString("sessionId").orEmpty(),
+            onBack = { navController.popBackStack() },
+        )
     }
 
     composable(

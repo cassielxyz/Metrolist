@@ -9,18 +9,16 @@ class YouTubeUtilsTest {
     fun `lh3 googleusercontent is rewritten to the requested size`() {
         val url = "https://lh3.googleusercontent.com/abc=w120-h120-l90-rj"
         assertEquals(
-            "https://lh3.googleusercontent.com/abc=w544-h544-l90-rj",
+            "https://lh3.googleusercontent.com/abc=w544-h544-p-l90-rj",
             url.resize(544, 544),
         )
     }
 
     @Test
     fun `yt3 googleusercontent is rewritten too (YouTube migrated host - fixes the blurry player)`() {
-        // YT moved album art to yt3.googleusercontent.com and serves a ~60px thumbnail; without
-        // matching this host, resize() would no-op and the player upscales the 60px image → blur.
         val url = "https://yt3.googleusercontent.com/_zDuDZFnSKmuQwDX=w60-h60-l90-rj"
         assertEquals(
-            "https://yt3.googleusercontent.com/_zDuDZFnSKmuQwDX=w544-h544-l90-rj",
+            "https://yt3.googleusercontent.com/_zDuDZFnSKmuQwDX=w544-h544-p-l90-rj",
             url.resize(544, 544),
         )
     }

@@ -1,16 +1,124 @@
-name: Build PR
+name: KaraVox Contributor Verification
 
 on:
   pull_request:
     branches:
       - "**"
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: "23 2 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: karavox-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  KARAVOX_APPLICATION_ID: com.cassiel.karavox.ci
+  KARAVOX_APP_NAME: KaraVox CI
+  KARAVOX_DEBUG_KEYSTORE_PATH: ci-debug.keystore
+  KARAVOX_DEBUG_KEYSTORE_PASSWORD: android
+  KARAVOX_DEBUG_KEY_ALIAS: androiddebugkey
+  KARAVOX_DEBUG_KEY_PASSWORD: android
 
 jobs:
-  build:
+  source-verification:
+    name: Source and repository policy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          submodules: false
+
+      - name: Verify KaraVox project invariants
+        run: bash scripts/ci/verify_karavox_project.sh
+
+  build-test-lint:
+    name: FOSS build, unit tests and Android lint
+    needs: source-verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout with submodules
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          submodules: recursive
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: 21
+          distribution: temurin
+
+      - name: Set up Gradle and validate wrapper
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+          cache-cleanup: on-success
+
+      - name: Grant Gradle wrapper execute permission
+        run: chmod +x gradlew
+
+      - name: Generate isolated CI debug keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore app/ci-debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=KaraVox CI,O=KaraVox,C=IN"
+
+      - name: Run KaraVox verification suite
+        run: |
+          ./gradlew --console=plain --stacktrace --warning-mode summary \
+            :app:testFossDebugUnitTest \
+            :app:lintFossDebug \
+            assembleFossDebug
+
+      - name: Upload unit-test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: karavox-verification-reports-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            app/build/reports/tests/**
+            app/build/reports/lint-results-*.html
+            app/build/reports/lint-results-*.xml
+
+      - name: Upload verified FOSS debug APK
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: karavox-foss-debug-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 14
+          path: app/build/outputs/apk/foss/debug/*.apk
+
+  full-variant-verification:
+    name: Scheduled/manual all-variant build
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: build-test-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -18,57 +126,39 @@ jobs:
         uses: actions/setup-java@v5
         with:
           java-version: 21
-          distribution: "temurin"
+          distribution: temurin
 
-      - name: Set Up Gradle
+      - name: Set up Gradle and validate wrapper
         uses: gradle/actions/setup-gradle@v5
         with:
-          cache-read-only: true
           cache-cleanup: on-success
 
-      - name: Grant execute permission for gradlew
+      - name: Grant Gradle wrapper execute permission
         run: chmod +x gradlew
 
-      - name: Restore PR debug keystore
-        id: pr_keystore
-        uses: actions/cache/restore@v5
-        with:
-          path: app/pr-debug.keystore
-          key: pr-debug-keystore-${{ github.event.number }}
-
-      - name: Generate PR debug keystore if not cached
-        if: steps.pr_keystore.outputs.cache-hit != 'true'
+      - name: Generate isolated CI debug keystore
         run: |
           keytool -genkeypair -v \
-            -keystore app/pr-debug.keystore \
+            -keystore app/ci-debug.keystore \
             -storepass android \
             -alias androiddebugkey \
             -keypass android \
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -dname "CN=Metrolist PR ${{ github.event.number }},O=Metrolist,C=US"
+            -dname "CN=KaraVox Full CI,O=KaraVox,C=IN"
 
-      - name: Save PR debug keystore
-        if: steps.pr_keystore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: app/pr-debug.keystore
-          key: ${{ steps.pr_keystore.outputs.cache-primary-key }}
+      - name: Build all supported debug variants
+        run: |
+          ./gradlew --console=plain --stacktrace --warning-mode summary \
+            assembleFossDebug \
+            assembleGmsDebug \
+            assembleIzzyDebug
 
-      - name: Build and Lint FOSS Debug APK
-        run: ./gradlew --console=plain assembleFossDebug :app:lintFossDebug --warning-mode summary
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          METROLIST_APPLICATION_ID: com.metrolist.music.pr.p${{ github.event.number }}
-          METROLIST_APP_NAME: Metrolist PR ${{ github.event.number }}
-          METROLIST_DEBUG_KEYSTORE_PATH: pr-debug.keystore
-          PULL_REQUEST: "true"
-          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
-          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
-
-      - name: Upload APK
+      - name: Upload all debug variants
         uses: actions/upload-artifact@v6
         with:
-          name: app-universal-debug-pr-${{ github.event.number }}
-          path: app/build/outputs/apk/foss/debug/*.apk
+          name: karavox-all-variants-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 7
+          path: app/build/outputs/apk/**/debug/*.apk

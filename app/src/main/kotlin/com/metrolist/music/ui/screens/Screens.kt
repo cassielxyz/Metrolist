@@ -31,6 +31,10 @@ sealed class Screens(
         route = "search_input"
     )
 
+    /**
+     * Kept as a compatibility route for existing Metrolist navigation/settings references.
+     * In the karaoke fork this route opens the recording-first private duet room.
+     */
     object ListenTogether : Screens(
         titleId = R.string.together,
         iconIdInactive = R.drawable.group_outlined,
@@ -45,7 +49,15 @@ sealed class Screens(
         route = "library"
     )
 
+    object Recordings : Screens(
+        titleId = R.string.karaoke_recordings,
+        iconIdInactive = R.drawable.mic_outlined,
+        iconIdActive = R.drawable.mic_filled,
+        route = "karaoke_recordings"
+    )
+
     companion object {
-        val MainScreens = listOf(Home, Search, ListenTogether, Library)
+        /** Karaoke-first bottom navigation. */
+        val MainScreens = listOf(Home, Search, Library, Recordings)
     }
 }
