@@ -25,18 +25,48 @@ require_text() {
   grep -Fq "$text" "$file" || fail "$message"
 }
 
+forbid_text() {
+  local file="$1"
+  local text="$2"
+  local message="$3"
+  if grep -Fq "$text" "$file"; then
+    fail "$message"
+  fi
+}
+
 note "Checking KaraVox project identity and required project files"
 require_file "README.md"
 require_file "NOTICE.md"
 require_file "LICENSE"
 require_file "docs/KARAOKE_ARCHITECTURE.md"
 require_file "app/build.gradle.kts"
+require_file "app/src/main/AndroidManifest.xml"
+require_file "app/src/main/res/values/app_name.xml"
+require_file "app/src/main/res/drawable/ic_launcher_foreground.xml"
+require_file "app/src/main/res/drawable/ic_launcher_monochrome.xml"
+require_file "app/src/main/res/xml/network_security_config.xml"
+require_file "app/src/main/kotlin/com/metrolist/music/KaraVoxActivity.kt"
 require_file "app/src/main/kotlin/com/metrolist/music/karaoke/separator/KaraVoxModelCatalog.kt"
+require_file ".github/workflows/build_pr.yml"
+require_file ".github/workflows/release.yml"
 
 require_text "README.md" "# KaraVox" "README must identify the product as KaraVox"
 require_text "NOTICE.md" "Metrolist" "NOTICE.md must preserve upstream Metrolist attribution"
 require_text "app/build.gradle.kts" 'val baseApplicationId = "com.cassiel.karavox"' "KaraVox application ID changed unexpectedly"
 require_text "app/build.gradle.kts" 'appNameOverride ?: "KaraVox"' "KaraVox default app name changed unexpectedly"
+require_text "app/src/main/res/values/app_name.xml" '>KaraVox<' "Launcher app label must be KaraVox"
+forbid_text "app/src/main/res/values/app_name.xml" '>Metrolist<' "Inherited Metrolist launcher label must not return"
+require_text "app/src/main/res/drawable/ic_launcher_foreground.xml" '#54E5F7' "KaraVox launcher foreground identity changed unexpectedly"
+require_text "app/src/main/AndroidManifest.xml" 'android:name=".KaraVoxActivity"' "KaraVoxActivity must be the launcher activity"
+require_text "app/src/main/res/xml/network_security_config.xml" 'cleartextTrafficPermitted="false"' "Production cleartext network traffic must stay disabled"
+forbid_text "app/src/main/AndroidManifest.xml" 'android:name=".MainActivity"' "Legacy Metrolist MainActivity must not be mounted in the production manifest"
+forbid_text "app/src/main/AndroidManifest.xml" 'android:name=".playback.MusicService"' "Legacy normal-player MusicService must not be mounted in the production manifest"
+
+note "Checking production release workflow safeguards"
+require_text ".github/workflows/release.yml" 'KARAVOX_RELEASE_KEYSTORE_B64' "Release workflow must require a protected KaraVox signing key"
+require_text ".github/workflows/release.yml" 'apksigner" verify' "Release workflow must verify the signed APK"
+require_text ".github/workflows/release.yml" 'sha256sum dist/KaraVox.apk' "Release workflow must publish an APK checksum"
+require_text ".github/workflows/release.yml" 'tags:' "Production release workflow must support tag-triggered releases"
 
 note "Checking for unresolved merge-conflict markers"
 if git grep -n -E '^(<<<<<<< |=======|>>>>>>> )' -- . >/tmp/karavox-conflicts.txt 2>/dev/null; then
