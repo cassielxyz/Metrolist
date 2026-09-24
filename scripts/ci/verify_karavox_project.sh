@@ -58,7 +58,7 @@ forbid_text "app/src/main/AndroidManifest.xml" 'android:name=".playback.MusicSer
 
 note "Checking production release workflow safeguards"
 require_text ".github/workflows/release.yml" 'KARAVOX_RELEASE_KEYSTORE_B64' "Release workflow must require a protected KaraVox signing key"
-require_text ".github/workflows/release.yml" 'apksigner verify' "Release workflow must verify the signed APK"
+require_text ".github/workflows/release.yml" 'apksigner" verify' "Release workflow must verify the signed APK"
 require_text ".github/workflows/release.yml" 'sha256sum dist/KaraVox.apk' "Release workflow must publish an APK checksum"
 require_text ".github/workflows/release.yml" 'tags:' "Production release workflow must support tag-triggered releases"
 
