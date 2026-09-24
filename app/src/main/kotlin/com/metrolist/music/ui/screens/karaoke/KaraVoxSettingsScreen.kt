@@ -29,10 +29,12 @@ import com.metrolist.music.karaoke.cache.KaraokeStorageUsage
 import com.metrolist.music.karaoke.model.KaraokeSessionStore
 import com.metrolist.music.karaoke.model.SeparationQuality
 import com.metrolist.music.karaoke.settings.KaraokeDefaultVocalMixKey
+import com.metrolist.music.karaoke.settings.KaraokeDuetManualOffsetMsKey
 import com.metrolist.music.karaoke.settings.KaraokeSeparationQualityKey
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
 import kotlinx.coroutines.launch
+import kotlin.math.roundToLong
 
 @Composable
 fun KaraVoxSettingsScreen() {
@@ -43,6 +45,7 @@ fun KaraVoxSettingsScreen() {
     var status by remember { mutableStateOf<String?>(null) }
     var quality by rememberEnumPreference(KaraokeSeparationQualityKey, SeparationQuality.BALANCED)
     var defaultVocalMix by rememberPreference(KaraokeDefaultVocalMixKey, 0f)
+    var duetManualOffsetMs by rememberPreference(KaraokeDuetManualOffsetMsKey, 0L)
 
     fun refresh() {
         scope.launch { usage = manager.usage() }
@@ -57,6 +60,7 @@ fun KaraVoxSettingsScreen() {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("KaraVox settings", style = MaterialTheme.typography.headlineMedium)
+
         Text("Separation quality", style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FilterChip(
@@ -84,6 +88,27 @@ fun KaraVoxSettingsScreen() {
             value = defaultVocalMix.coerceIn(0f, 1f),
             onValueChange = { defaultVocalMix = it.coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth(),
+        )
+
+        Text("Duet timing correction", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "Partner track ${if (duetManualOffsetMs >= 0L) "+" else ""}${duetManualOffsetMs} ms",
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Slider(
+            value = duetManualOffsetMs.toFloat().coerceIn(-1_000f, 1_000f),
+            onValueChange = { duetManualOffsetMs = it.roundToLong() },
+            valueRange = -1_000f..1_000f,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { duetManualOffsetMs -= 10L }) { Text("-10 ms") }
+            OutlinedButton(onClick = { duetManualOffsetMs = 0L }) { Text("Reset") }
+            OutlinedButton(onClick = { duetManualOffsetMs += 10L }) { Text("+10 ms") }
+        }
+        Text(
+            "This correction is applied after KaraVox automatic duet alignment, so you can fine-tune the final timing between both singers.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Text("Storage", style = MaterialTheme.typography.titleLarge)
